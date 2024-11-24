@@ -8,8 +8,4 @@ for /L %%i in (1,1,80) do (
     set "content=!content!!char!"
 )
 echo !content! > %random%.txt
-
-set "key="
-set /p "key=Premi S per fermare: " <nul
-if /i "%key%"=="S" exit
 goto loop

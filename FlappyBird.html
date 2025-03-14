@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flappy Bird Advanced</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #333;
+      color: #fff;
+      overflow: hidden;
+    }
+    .screen {
+      display: none;
+      text-align: center;
+      padding-top: 50px;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+    /* Main Menu: lo sfondo verrà impostato dinamicamente tramite le impostazioni */
+    #main-menu {
+      display: block;
+    }
+    h1 {
+      margin-bottom: 30px;
+    }
+    .btn {
+      display: inline-block;
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 18px;
+      border: 2px solid #000;
+      border-radius: 8px;
+      background: #666;
+      color: #fff;
+      cursor: pointer;
+    }
+    /* Impostazioni */
+    #settings-menu label {
+      display: block;
+      margin: 10px 0 5px;
+    }
+    #settings-menu input, #settings-menu select {
+      padding: 5px;
+      font-size: 16px;
+      width: 220px;
+      margin-bottom: 10px;
+    }
+    /* Shop: griglia dei colori */
+    #shop-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 60px);
+      grid-gap: 10px;
+      justify-content: center;
+      margin: 20px auto;
+    }
+    .skin-item {
+      width: 60px;
+      height: 60px;
+      line-height: 60px;
+      text-align: center;
+      border: 2px solid #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    /* Game Screen */
+    #game-screen {
+      position: relative;
+      background: #000;
+    }
+    #game-canvas {
+      display: block;
+      margin: 0 auto;
+      background: #000;
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    #game-exit-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 5px 10px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Main Menu -->
+  <div id="main-menu" class="screen">
+    <h1 id="title"></h1>
+    <button id="start-btn" class="btn"></button>
+    <button id="settings-btn" class="btn"></button>
+    <button id="shop-btn" class="btn"></button>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings-menu" class="screen">
+    <h1 id="settings-title"></h1>
+    <label id="bg-color-label"></label>
+    <select id="bg-color-dropdown"></select>
+    <label id="gravity-label"></label>
+    <input type="number" id="gravity-input" step="0.1" value="0.5">
+    <label id="player-size-label"></label>
+    <input type="number" id="player-size-input" value="30">
+    <label id="jump-power-label"></label>
+    <input type="number" id="jump-power-input" value="5">
+    <label id="language-label"></label>
+    <select id="language-dropdown"></select>
+    <div style="margin-top:20px;">
+      <button id="settings-save-btn" class="btn"></button>
+      <button id="settings-back-btn" class="btn"></button>
+    </div>
+  </div>
+
+  <!-- Shop -->
+  <div id="shop-menu" class="screen">
+    <h1 id="shop-title"></h1>
+    <div id="shop-grid"></div>
+    <p id="coins-display"></p>
+    <button id="shop-exit-btn" class="btn"></button>
+  </div>
+
+  <!-- Game -->
+  <div id="game-screen" class="screen">
+    <canvas id="game-canvas"></canvas>
+    <button id="game-exit-btn" class="btn"></button>
+    <div id="hud"></div>
+  </div>
+
+  <!-- Game Over -->
+  <div id="game-over-screen" class="screen">
+    <h1 id="game-over-title"></h1>
+    <p id="final-score"></p>
+    <button id="restart-btn" class="btn"></button>
+    <button id="gameover-menu-btn" class="btn"></button>
+  </div>
+
+  <script>
+    // Impostazioni globali
+    const settings = {
+      canvasWidth: 400,
+      canvasHeight: 600,
+      playerSize: 30,
+      jumpPower: 10,
+      gravity: 0.5,
+      // Il background del Main Menu è modificabile tramite il dropdown nelle impostazioni
+      mainMenuBackground: "#0000FF", // default blu
+      // Il game background rimane fisso (in questo esempio nero)
+      gameBackground: "#000"
+    };
+
+    // 20 opzioni per il background del Main Menu
+    const bgColors = [
+      "#0000FF", "#FFD700", "#ADFF2F", "#FF69B4", "#20B2AA",
+      "#FF7F50", "#6495ED", "#DC143C", "#00FFFF", "#7FFF00",
+      "#D2691E", "#FF1493", "#00BFFF", "#1E90FF", "#FF4500",
+      "#2E8B57", "#FF6347", "#40E0D0", "#EE82EE", "#F08080"
+    ];
+
+    // Dizionari per le lingue
+    // Le opzioni "Gen Z", "Gen X" e "Gen Y" ora usano testi in italiano
+    const languages = {
+      it: {
+        title: "Flappy Bird Advanced",
+        start: "Inizia",
+        settings: "Impostazioni",
+        shop: "Negozio",
+        settingsTitle: "Impostazioni",
+        bgColor: "Colore di Sfondo",
+        gravity: "Gravità",
+        playerSize: "Dimensione del Player",
+        jumpPower: "Potenza del Salto",
+        language: "Lingua",
+        save: "Salva",
+        back: "Indietro",
+        shopTitle: "Negozio - Acquista Skin",
+        coins: "Monete: ",
+        exit: "Esci",
+        gameOver: "Game Over",
+        score: "Punteggio: ",
+        restart: "Ricomincia",
+        mainMenu: "Menu Principale"
+      },
+      en: {
+        title: "Flappy Bird Advanced",
+        start: "Start",
+        settings: "Settings",
+        shop: "Shop",
+        settingsTitle: "Settings",
+        bgColor: "Background Color",
+        gravity: "Gravity",
+        playerSize: "Player Size",
+        jumpPower: "Jump Power",
+        language: "Language",
+        save: "Save",
+        back: "Back",
+        shopTitle: "Shop - Buy Skin",
+        coins: "Coins: ",
+        exit: "Exit",
+        gameOver: "Game Over",
+        score: "Score: ",
+        restart: "Restart",
+        mainMenu: "Main Menu"
+      },
+      fr: {
+        title: "Flappy Bird Avancé",
+        start: "Démarrer",
+        settings: "Paramètres",
+        shop: "Boutique",
+        settingsTitle: "Paramètres",
+        bgColor: "Couleur de Fond",
+        gravity: "Gravité",
+        playerSize: "Taille du Joueur",
+        jumpPower: "Puissance du Saut",
+        language: "Langue",
+        save: "Sauvegarder",
+        back: "Retour",
+        shopTitle: "Boutique - Acheter une Skin",
+        coins: "Pièces: ",
+        exit: "Sortir",
+        gameOver: "Jeu Terminé",
+        score: "Score: ",
+        restart: "Redémarrer",
+        mainMenu: "Menu Principal"
+      },
+      es: {
+        title: "Flappy Bird Avanzado",
+        start: "Iniciar",
+        settings: "Ajustes",
+        shop: "Tienda",
+        settingsTitle: "Ajustes",
+        bgColor: "Color de Fondo",
+        gravity: "Gravedad",
+        playerSize: "Tamaño del Jugador",
+        jumpPower: "Potencia del Salto",
+        language: "Idioma",
+        save: "Guardar",
+        back: "Atrás",
+        shopTitle: "Tienda - Comprar Skin",
+        coins: "Monedas: ",
+        exit: "Salir",
+        gameOver: "Fin del Juego",
+        score: "Puntuación: ",
+        restart: "Reiniciar",
+        mainMenu: "Menú Principal"
+      },
+      de: {
+        title: "Flappy Bird Fortgeschritten",
+        start: "Starten",
+        settings: "Einstellungen",
+        shop: "Shop",
+        settingsTitle: "Einstellungen",
+        bgColor: "Hintergrundfarbe",
+        gravity: "Schwerkraft",
+        playerSize: "Spielergröße",
+        jumpPower: "Sprungkraft",
+        language: "Sprache",
+        save: "Speichern",
+        back: "Zurück",
+        shopTitle: "Shop - Skin Kaufen",
+        coins: "Münzen: ",
+        exit: "Beenden",
+        gameOver: "Spiel Vorbei",
+        score: "Punktzahl: ",
+        restart: "Neustarten",
+        mainMenu: "Hauptmenü"
+      },
+      tr: {
+        title: "Gelişmiş Flappy Bird",
+        start: "Başla",
+        settings: "Ayarlar",
+        shop: "Mağaza",
+        settingsTitle: "Ayarlar",
+        bgColor: "Arka Plan Rengi",
+        gravity: "Yerçekimi",
+        playerSize: "Oyuncu Boyutu",
+        jumpPower: "Zıplama Gücü",
+        language: "Dil",
+        save: "Kaydet",
+        back: "Geri",
+        shopTitle: "Mağaza - Skin Satın Al",
+        coins: "Paralar: ",
+        exit: "Çıkış",
+        gameOver: "Oyun Bitti",
+        score: "Skor: ",
+        restart: "Tekrar Başla",
+        mainMenu: "Ana Menü"
+      },
+      ru: {
+        title: "Продвинутый Flappy Bird",
+        start: "Начать",
+        settings: "Настройки",
+        shop: "Магазин",
+        settingsTitle: "Настройки",
+        bgColor: "Цвет фона",
+        gravity: "Гравитация",
+        playerSize: "Размер игрока",
+        jumpPower: "Сила прыжка",
+        language: "Язык",
+        save: "Сохранить",
+        back: "Назад",
+        shopTitle: "Магазин - Купить скин",
+        coins: "Монеты: ",
+        exit: "Выход",
+        gameOver: "Игра окончена",
+        score: "Счет: ",
+        restart: "Начать заново",
+        mainMenu: "Главное меню"
+      },
+      uk: {
+        title: "Покращений Flappy Bird",
+        start: "Почати",
+        settings: "Налаштування",
+        shop: "Магазин",
+        settingsTitle: "Налаштування",
+        bgColor: "Колір фону",
+        gravity: "Гравітація",
+        playerSize: "Розмір гравця",
+        jumpPower: "Сила стрибка",
+        language: "Мова",
+        save: "Зберегти",
+        back: "Назад",
+        shopTitle: "Магазин - Купити скін",
+        coins: "Монети: ",
+        exit: "Вихід",
+        gameOver: "Гру закінчено",
+        score: "Рахунок: ",
+        restart: "Почати знову",
+        mainMenu: "Головне меню"
+      },
+      in: {
+        title: "फ्लैपी बर्ड एडवांस्ड",
+        start: "शुरू करें",
+        settings: "सेटिंग्स",
+        shop: "दुकान",
+        settingsTitle: "सेटिंग्स",
+        bgColor: "पृष्ठभूमि रंग",
+        gravity: "गुरुत्वाकर्षण",
+        playerSize: "प्लेयर का आकार",
+        jumpPower: "कूद की शक्ति",
+        language: "भाषा",
+        save: "सेव करें",
+        back: "पीछे जाएँ",
+        shopTitle: "दुकान - स्किन खरीदें",
+        coins: "सिक्के: ",
+        exit: "बाहर निकलें",
+        gameOver: "खेल समाप्त",
+        score: "स्कोर: ",
+        restart: "फिर से शुरू करें",
+        mainMenu: "मुख्य मेनू"
+      },
+      // Le opzioni generazionali ora usano testi in italiano
+      genz: {
+        title: "Flappy Bird Advanced",
+        start: "Inizia",
+        settings: "Impostazioni",
+        shop: "Negozio",
+        settingsTitle: "Impostazioni",
+        bgColor: "Colore di Sfondo",
+        gravity: "Gravità",
+        playerSize: "Dimensione del Player",
+        jumpPower: "Potenza del Salto",
+        language: "Lingua",
+        save: "Salva",
+        back: "Indietro",
+        shopTitle: "Negozio - Acquista Skin",
+        coins: "Monete: ",
+        exit: "Esci",
+        gameOver: "Game Over",
+        score: "Punteggio: ",
+        restart: "Ricomincia",
+        mainMenu: "Menu Principale"
+      },
+      genx: {
+        title: "Flappy Bird Advanced",
+        start: "Inizia",
+        settings: "Impostazioni",
+        shop: "Negozio",
+        settingsTitle: "Impostazioni",
+        bgColor: "Colore di Sfondo",
+        gravity: "Gravità",
+        playerSize: "Dimensione del Player",
+        jumpPower: "Potenza del Salto",
+        language: "Lingua",
+        save: "Salva",
+        back: "Indietro",
+        shopTitle: "Negozio - Acquista Skin",
+        coins: "Monete: ",
+        exit: "Esci",
+        gameOver: "Game Over",
+        score: "Punteggio: ",
+        restart: "Ricomincia",
+        mainMenu: "Menu Principale"
+      },
+      geny: {
+        title: "Flappy Bird Advanced",
+        start: "Inizia",
+        settings: "Impostazioni",
+        shop: "Negozio",
+        settingsTitle: "Impostazioni",
+        bgColor: "Colore di Sfondo",
+        gravity: "Gravità",
+        playerSize: "Dimensione del Player",
+        jumpPower: "Potenza del Salto",
+        language: "Lingua",
+        save: "Salva",
+        back: "Indietro",
+        shopTitle: "Negozio - Acquista Skin",
+        coins: "Monete: ",
+        exit: "Esci",
+        gameOver: "Game Over",
+        score: "Punteggio: ",
+        restart: "Ricomincia",
+        mainMenu: "Menu Principale"
+      }
+    };
+    let currentLang = "en";
+
+    // Aggiorna i testi in base alla lingua corrente
+    function updateLanguageTexts() {
+      const lang = languages[currentLang];
+      document.getElementById("title").textContent = lang.title;
+      document.getElementById("start-btn").textContent = lang.start;
+      document.getElementById("settings-btn").textContent = lang.settings;
+      document.getElementById("shop-btn").textContent = lang.shop;
+      document.getElementById("settings-title").textContent = lang.settingsTitle;
+      document.getElementById("bg-color-label").textContent = lang.bgColor;
+      document.getElementById("gravity-label").textContent = lang.gravity;
+      document.getElementById("player-size-label").textContent = lang.playerSize;
+      document.getElementById("jump-power-label").textContent = lang.jumpPower;
+      document.getElementById("language-label").textContent = lang.language;
+      document.getElementById("settings-save-btn").textContent = lang.save;
+      document.getElementById("settings-back-btn").textContent = lang.back;
+      document.getElementById("shop-title").textContent = lang.shopTitle;
+      document.getElementById("shop-exit-btn").textContent = lang.exit;
+      document.getElementById("game-exit-btn").textContent = lang.exit;
+      document.getElementById("game-over-title").textContent = lang.gameOver;
+      document.getElementById("restart-btn").textContent = lang.restart;
+      document.getElementById("gameover-menu-btn").textContent = lang.mainMenu;
+    }
+
+    // Inizializza il dropdown per il Main Menu background
+    function initBgColorDropdown() {
+      const dropdown = document.getElementById("bg-color-dropdown");
+      dropdown.innerHTML = "";
+      bgColors.forEach((color, index) => {
+        const option = document.createElement("option");
+        option.value = color;
+        option.textContent = "Colore " + (index + 1);
+        if(color === settings.mainMenuBackground) option.selected = true;
+        dropdown.appendChild(option);
+      });
+    }
+
+    // Inizializza il dropdown per le lingue
+    function initLanguageDropdown() {
+      const langDropdown = document.getElementById("language-dropdown");
+      langDropdown.innerHTML = "";
+      const options = [
+        { value: "it", text: "Italiano" },
+        { value: "en", text: "English" },
+        { value: "fr", text: "Français" },
+        { value: "es", text: "Español" },
+        { value: "de", text: "Deutsch" },
+        { value: "tr", text: "Türkçe" },
+        { value: "ru", text: "Русский" },
+        { value: "uk", text: "Українська" },
+        { value: "in", text: "हिन्दी" },
+        { value: "genz", text: "Gen Z" },
+        { value: "genx", text: "Gen X" },
+        { value: "geny", text: "Gen Y" }
+      ];
+      options.forEach(opt => {
+        const option = document.createElement("option");
+        option.value = opt.value;
+        option.textContent = opt.text;
+        if(opt.value === currentLang) option.selected = true;
+        langDropdown.appendChild(option);
+      });
+    }
+
+    // Mostra la schermata indicata
+    function showScreen(screenId) {
+      document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
+      document.getElementById(screenId).style.display = "block";
+      if(screenId === "main-menu") {
+        // Applica il background scelto alle impostazioni al Main Menu
+        document.getElementById("main-menu").style.background = settings.mainMenuBackground;
+      }
+    }
+
+    // Variabili globali di gioco
+    let coins = 0, score = 0, level = 1;
+    let pipes = [], coinsArr = [], player;
+    let gameCanvas, ctx;
+    let playerColor = "#FF0000"; // Skin di default
+    const playerSkins = [
+      "#FF0000", "#00FF00", "#0000FF",
+      "#FFFF00", "#FF00FF", "#00FFFF",
+      "#C0C0C0", "#800000", "#808000",
+      "#008000", "#800080", "#008080",
+      "#000080", "#FFA500", "#FFC0CB",
+      "#D2691E", "#228B22", "#4B0082",
+      "#7FFFD4", "#483D8B", "#5F9EA0",
+      "#FF69B4", "#FF1493", "#DC143C",
+      "#C71585", "#DA70D6", "#BA55D3",
+      "#8A2BE2", "#6A5ACD", "#7B68EE"
+    ];
+    let purchasedSkins = [playerColor];
+    const skinCost = 50;
+    // Variabile per alternare la generazione della moneta per ogni coppia di tubi
+    let coinToggle = false;
+
+    // Classe per il player nel gioco
+    class GamePlayer {
+      constructor(x, y, size, color) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.color = color;
+        this.velY = 0;
+      }
+      update() {
+        this.velY += settings.gravity;
+        this.y += this.velY;
+      }
+      jump() {
+        this.velY = -settings.jumpPower;
+      }
+      draw() {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      getRect() {
+        return { x: this.x - this.size/2, y: this.y - this.size/2, width: this.size, height: this.size };
+      }
+    }
+
+    // Classe per i tubi
+    class Pipe {
+      constructor(x, y, width, height, isTop) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.isTop = isTop;
+      }
+      update() {
+        this.x -= 3;
+      }
+      draw() {
+        ctx.fillStyle = "#228B22"; // verde scuro
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+      getRect() {
+        return { x: this.x, y: this.y, width: this.width, height: this.height };
+      }
+    }
+
+    // Classe per le monete
+    class Coin {
+      constructor(x, y, radius) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+      }
+      update() {
+        this.x -= 3;
+      }
+      draw() {
+        ctx.fillStyle = "#FFD700"; // oro
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      getRect() {
+        return { x: this.x - this.radius, y: this.y - this.radius, width: this.radius*2, height: this.radius*2 };
+      }
+    }
+
+    // Controllo collisioni
+    function isColliding(rect1, rect2) {
+      return !(rect1.x > rect2.x + rect2.width ||
+               rect1.x + rect1.width < rect2.x ||
+               rect1.y > rect2.y + rect2.height ||
+               rect1.y + rect1.height < rect2.y);
+    }
+
+    // Avvia il gioco in full-screen orizzontale
+    function startGame() {
+      score = 0;
+      level = 1;
+      pipes = [];
+      coinsArr = [];
+      // Imposta le dimensioni del canvas in base alla finestra (full-screen orizzontale)
+      settings.canvasWidth = window.innerWidth;
+      settings.canvasHeight = window.innerHeight;
+      gameCanvas = document.getElementById("game-canvas");
+      gameCanvas.width = settings.canvasWidth;
+      gameCanvas.height = settings.canvasHeight;
+      ctx = gameCanvas.getContext("2d");
+      player = new GamePlayer(100, settings.canvasHeight/2, settings.playerSize, playerColor);
+
+      document.onkeydown = function(e) {
+        if(e.code === "Space") player.jump();
+      };
+
+      gameLoop.running = true;
+      gameLoop();
+    }
+    gameLoop.running = true;
+
+    function gameLoop() {
+      updateGame();
+      drawGame();
+      if(gameLoop.running) {
+        requestAnimationFrame(gameLoop);
+      } else {
+        showGameOver();
+      }
+    }
+
+    function updateGame() {
+      player.update();
+      // Collisione con il "terreno" a 100px dal fondo
+      if(player.y + player.size/2 > settings.canvasHeight - 100) {
+        gameLoop.running = false;
+      }
+      // Aggiorna i tubi e controlla la collisione con il player
+      pipes.forEach(pipe => {
+        pipe.update();
+        if(isColliding(player.getRect(), pipe.getRect())) {
+          gameLoop.running = false;
+        }
+      });
+      pipes = pipes.filter(pipe => pipe.x + pipe.width > 0);
+      // Genera nuove coppie di tubi con maggiore distanza orizzontale (settings.canvasWidth - 300)
+      if(pipes.length === 0 || pipes[pipes.length - 1].x < settings.canvasWidth - 300) {
+        let gap = 150;
+        let topHeight = Math.random() * (settings.canvasHeight - 200 - gap) + 50;
+        pipes.push(new Pipe(settings.canvasWidth, 0, 50, topHeight, true));
+        pipes.push(new Pipe(settings.canvasWidth, topHeight + gap, 50, settings.canvasHeight - 100 - (topHeight + gap), false));
+        score++;
+        if(score % 10 === 0) level++;
+        // Alterna la generazione della moneta
+        coinToggle = !coinToggle;
+        if(coinToggle) {
+          // Posiziona la moneta al centro del gap fra i tubi
+          coinsArr.push(new Coin(settings.canvasWidth + 25, topHeight + gap/2, 8));
+        }
+      }
+      // Aggiorna le monete e controlla se il player le raccoglie
+      coinsArr.forEach(coin => coin.update());
+      coinsArr = coinsArr.filter(coin => coin.x + coin.radius > 0);
+      coinsArr.forEach(coin => {
+        if(isColliding(player.getRect(), coin.getRect())) {
+          coins++;
+          // Rimuove la moneta appena raccolta
+          coin.x = -100;
+        }
+      });
+    }
+
+    function drawGame() {
+      ctx.fillStyle = settings.gameBackground;
+      ctx.fillRect(0, 0, settings.canvasWidth, settings.canvasHeight);
+      // Disegna il terreno (100px dal fondo)
+      ctx.fillStyle = "#8B4513";
+      ctx.fillRect(0, settings.canvasHeight - 100, settings.canvasWidth, 100);
+      pipes.forEach(pipe => pipe.draw());
+      coinsArr.forEach(coin => coin.draw());
+      player.draw();
+      document.getElementById("hud").textContent = languages[currentLang].score + score + " | " + languages[currentLang].coins + coins + " | Level: " + level;
+    }
+
+    function showGameOver() {
+      showScreen("game-over-screen");
+      document.getElementById("final-score").textContent = languages[currentLang].score + score;
+    }
+
+    // Gestione shop
+    function updateShop() {
+      const shopGrid = document.getElementById("shop-grid");
+      shopGrid.innerHTML = "";
+      playerSkins.forEach((skin) => {
+        const skinDiv = document.createElement("div");
+        skinDiv.className = "skin-item";
+        skinDiv.style.backgroundColor = skin;
+        skinDiv.textContent = (purchasedSkins.includes(skin)) ? "" : skinCost;
+        skinDiv.addEventListener("click", function() {
+          if(purchasedSkins.includes(skin)) {
+            playerColor = skin;
+          } else {
+            if(coins >= skinCost) {
+              coins -= skinCost;
+              purchasedSkins.push(skin);
+              playerColor = skin;
+              updateShop();
+            }
+          }
+        });
+        shopGrid.appendChild(skinDiv);
+      });
+      document.getElementById("coins-display").textContent = languages[currentLang].coins + coins;
+    }
+
+    // Gestione bottoni delle varie schermate
+    document.getElementById("start-btn").addEventListener("click", function() {
+      showScreen("game-screen");
+      gameLoop.running = true;
+      startGame();
+    });
+    document.getElementById("settings-btn").addEventListener("click", function() {
+      showScreen("settings-menu");
+    });
+    document.getElementById("shop-btn").addEventListener("click", function() {
+      showScreen("shop-menu");
+      updateShop();
+    });
+    document.getElementById("settings-save-btn").addEventListener("click", function() {
+      const dropdown = document.getElementById("bg-color-dropdown");
+      settings.mainMenuBackground = dropdown.value;
+      settings.gravity = parseFloat(document.getElementById("gravity-input").value);
+      settings.playerSize = parseInt(document.getElementById("player-size-input").value);
+      settings.jumpPower = parseInt(document.getElementById("jump-power-input").value);
+      const langDropdown = document.getElementById("language-dropdown");
+      currentLang = langDropdown.value;
+      updateLanguageTexts();
+      showScreen("main-menu");
+    });
+    document.getElementById("settings-back-btn").addEventListener("click", function() {
+      showScreen("main-menu");
+    });
+    document.getElementById("shop-exit-btn").addEventListener("click", function() {
+      showScreen("main-menu");
+    });
+    document.getElementById("game-exit-btn").addEventListener("click", function() {
+      gameLoop.running = false;
+      showScreen("main-menu");
+    });
+    document.getElementById("restart-btn").addEventListener("click", function() {
+      showScreen("game-screen");
+      gameLoop.running = true;
+      startGame();
+    });
+    document.getElementById("gameover-menu-btn").addEventListener("click", function() {
+      showScreen("main-menu");
+    });
+
+    window.onload = function() {
+      initBgColorDropdown();
+      initLanguageDropdown();
+      updateLanguageTexts();
+      showScreen("main-menu");
+    };
+  </script>
+</body>
+</html>

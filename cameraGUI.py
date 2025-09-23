@@ -172,7 +172,7 @@ def build_remap(w, h, zoom_factor=1.0, distortion=0.0, edge_power=2.0, mirror_x=
 class CameraWindow(QtWidgets.QMainWindow):
     def __init__(self, cam_index=0):
         super().__init__()
-        self.setWindowTitle("Camera Studio — By Huawetto with AI")
+        self.setWindowTitle("Camera Studio — Offline")
         self.cam_index = cam_index
 
         # state
@@ -205,6 +205,9 @@ class CameraWindow(QtWidgets.QMainWindow):
         self.last_frame = None
         self.last_display = None
         self.is_paused = False
+
+        # Save folder: default current working directory
+        self.save_folder = os.getcwd()
 
         # Build UI
         self._build_ui()
@@ -341,12 +344,26 @@ class CameraWindow(QtWidgets.QMainWindow):
         self.lbl_preview.mousePressEvent = self.on_preview_click
         rlayout.addWidget(self.lbl_preview, alignment=QtCore.Qt.AlignCenter)
 
+        # folder selection row
+        folder_row = QtWidgets.QWidget()
+        folder_layout = QtWidgets.QHBoxLayout(folder_row)
+        folder_layout.setContentsMargins(0,0,0,0)
+        folder_layout.addStretch(1)
+        self.btn_choose_folder = QtWidgets.QPushButton("Cartella salvataggio")
+        self.btn_choose_folder.clicked.connect(self.choose_folder)
+        folder_layout.addWidget(self.btn_choose_folder)
+        # label that shows current folder (shortened if long)
+        self.lbl_folder = QtWidgets.QLabel(self._shorten_path(self.save_folder))
+        self.lbl_folder.setToolTip(self.save_folder)
+        folder_layout.addWidget(self.lbl_folder)
+        folder_layout.addStretch(1)
+        rlayout.addWidget(folder_row)
+
         # bottom center capture button
         btn_bar = QtWidgets.QWidget()
         bar_layout = QtWidgets.QHBoxLayout(btn_bar)
         bar_layout.addStretch(1)
         self.btn_capture = QtWidgets.QPushButton("Scatta")
-        # style: blue text, green bg, black border
         self.btn_capture.setStyleSheet("color: blue; background-color: green; border: 2px solid black; font-weight: bold; font-size: 18px; padding: 12px 24px;")
         self.btn_capture.clicked.connect(self.on_capture)
         bar_layout.addWidget(self.btn_capture)
@@ -360,6 +377,13 @@ class CameraWindow(QtWidgets.QMainWindow):
         # status bar
         self.status = QtWidgets.QLabel("Ready")
         self.statusBar().addWidget(self.status, 1)
+
+    def _shorten_path(self, path, maxlen=48):
+        if len(path) <= maxlen:
+            return path
+        head, tail = os.path.split(path)
+        short = f"...{os.sep}{tail}"
+        return short
 
     # ---------- Slots / UI handlers ----------
     def on_deform_slider(self, val):
@@ -419,6 +443,14 @@ class CameraWindow(QtWidgets.QMainWindow):
         self.list_pts.addItem(f"pt {len(self.control_points)}: ({nx:.2f},{ny:.2f}) s={pt['strength']:.3f} r={pt['radius']:.2f}")
         self.invalidate_map()
 
+    def choose_folder(self):
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Scegli cartella di salvataggio", self.save_folder or os.getcwd())
+        if folder:
+            self.save_folder = folder
+            self.lbl_folder.setText(self._shorten_path(self.save_folder))
+            self.lbl_folder.setToolTip(self.save_folder)
+            self.status.setText(f"Cartella selezionata: {self.save_folder}")
+
     def save_profile(self):
         fname, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save profile", "", "JSON files (*.json)")
         if not fname:
@@ -435,6 +467,7 @@ class CameraWindow(QtWidgets.QMainWindow):
             "contrast": self.contrast,
             "saturation": self.saturation,
             "gamma": self.gamma,
+            "save_folder": self.save_folder,
         }
         try:
             with open(fname, "w") as f:
@@ -464,6 +497,8 @@ class CameraWindow(QtWidgets.QMainWindow):
         self.contrast = data.get("contrast", self.contrast)
         self.saturation = data.get("saturation", self.saturation)
         self.gamma = data.get("gamma", self.gamma)
+        # load save_folder if present
+        self.save_folder = data.get("save_folder", self.save_folder)
         # update UI sliders
         try:
             self.spin_deform.setMinimum(int(self.min_zoom))
@@ -483,6 +518,8 @@ class CameraWindow(QtWidgets.QMainWindow):
                 self.list_pts.addItem(f"pt {i+1}: ({pt['x']:.2f},{pt['y']:.2f}) s={pt['strength']:.3f} r={pt['radius']:.2f}")
             except Exception:
                 self.list_pts.addItem(f"pt {i+1}: (invalid data)")
+        self.lbl_folder.setText(self._shorten_path(self.save_folder))
+        self.lbl_folder.setToolTip(self.save_folder)
         self.invalidate_map()
         self.status.setText(f"Loaded profile {os.path.basename(fname)}")
 
@@ -579,11 +616,11 @@ class CameraWindow(QtWidgets.QMainWindow):
 
     # ---------- Capture ----------
     def on_capture(self):
-        """Save the last displayed image to disk (timestamped)"""
+        """Save the last displayed image to disk (timestamped) into self.save_folder"""
         if self.last_display is None:
             self.status.setText("No frame to capture")
             return
-        folder = os.path.expanduser("~/Pictures")
+        folder = self.save_folder or os.getcwd()
         try:
             os.makedirs(folder, exist_ok=True)
         except Exception:

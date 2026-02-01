@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DaP - Tool for Draw and Project</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #d1d1d1;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Scrollbar custom per i pannelli */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #2d2d2d; }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #777; }
+
+        .ribbon-group {
+            border-right: 1px solid #444;
+            padding: 4px 12px;
+            display: flex;
+            flex-direction: column;
+        }
+        .tool-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            min-width: 58px;
+            transition: all 0.2s;
+            user-select: none;
+            font-size: 10px;
+        }
+        .tool-btn:hover { background: #404040; }
+        .tool-btn.active { background: #0078d4; color: white; }
+        
+        canvas {
+            cursor: crosshair;
+            background-color: #151515;
+            touch-action: none;
+        }
+        
+        #dynamic-input-container {
+            position: absolute;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
+        
+        #dim-input {
+            pointer-events: auto;
+            background: rgba(30, 30, 30, 0.95);
+            color: #00ffcc;
+            border: 2px solid #0078d4;
+            font-family: 'Consolas', monospace;
+            font-weight: bold;
+            padding: 4px 8px;
+            width: 140px;
+            font-size: 16px;
+            outline: none;
+            border-radius: 4px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .param-badge {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #555;
+            transition: background 0.2s;
+        }
+        .param-badge:hover { background: #444; border-color: #0078d4; }
+        .param-active { border-color: #00ffcc; color: #00ffcc; }
+
+        /* Layer Manager Styles */
+        .layer-row {
+            display: grid;
+            grid-template-columns: 24px 24px 30px 1fr 40px 40px;
+            gap: 4px;
+            align-items: center;
+            padding: 4px;
+            border-bottom: 1px solid #333;
+            font-size: 11px;
+        }
+        .layer-row:hover { background-color: #333; }
+        .layer-row.active-layer { background-color: #004578; }
+        .icon-btn { cursor: pointer; opacity: 0.7; }
+        .icon-btn:hover { opacity: 1; color: white; }
+        .layer-color-swatch { width: 16px; height: 16px; border-radius: 2px; border: 1px solid #555; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <!-- Header / Ribbon -->
+    <div class="bg-[#2d2d2d] border-b border-black flex p-1 select-none overflow-x-auto h-[65px]">
+        <!-- Gruppo File -->
+        <div class="ribbon-group">
+            <div class="flex gap-1">
+                <div class="tool-btn" onclick="exportPNG()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+                    PNG
+                </div>
+            </div>
+            <div class="text-[9px] text-gray-500 text-center mt-auto font-bold">FILE</div>
+        </div>
+
+        <!-- Gruppo Cronologia -->
+        <div class="ribbon-group">
+            <div class="flex gap-1">
+                <div class="tool-btn" onclick="undo()" title="Annulla (Ctrl+Z)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6M3 13a9 9 0 1 1 3-7.7"></path></svg>
+                    UNDO
+                </div>
+                <div class="tool-btn" onclick="redo()" title="Ripristina (Ctrl+Y)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6M21 13a9 9 0 1 0-3-7.7"></path></svg>
+                    REDO
+                </div>
+            </div>
+            <div class="text-[9px] text-gray-500 text-center mt-auto font-bold">CRONOLOGIA</div>
+        </div>
+
+        <!-- Gruppo Disegno -->
+        <div class="ribbon-group">
+            <div class="flex gap-1">
+                <div class="tool-btn active" id="tool-line" onclick="setTool('line')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+                    LINEA
+                </div>
+                <div class="tool-btn" id="tool-polyline" onclick="setTool('polyline')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 18 8 6 14 12 20 6"></polyline></svg>
+                    POLILINEA
+                </div>
+                <div class="tool-btn" id="tool-circle" onclick="setTool('circle')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle></svg>
+                    CERCHIO
+                </div>
+                <div class="tool-btn" id="tool-arc" onclick="setTool('arc')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00ffcc" stroke-width="2"><path d="M20 12a8 8 0 0 0-16 0"></path><circle cx="12" cy="12" r="1"></circle></svg>
+                    ARCO
+                </div>
+                <div class="tool-btn" id="tool-rect" onclick="setTool('rect')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>
+                    RETT
+                </div>
+            </div>
+            <div class="text-[9px] text-gray-500 text-center mt-auto font-bold">DISEGNO</div>
+        </div>
+
+        <!-- Gruppo Modifica -->
+        <div class="ribbon-group">
+            <div class="flex gap-1">
+                <div class="tool-btn" id="tool-trim" onclick="setTool('trim')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 4L8.12 15.88M14.47 14.48L20 20"></path><circle cx="6" cy="18" r="2"></circle><circle cx="6" cy="6" r="2"></circle></svg>
+                    TAGLIA
+                </div>
+                <div class="tool-btn" id="tool-offset" onclick="setTool('offset')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00ffcc" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10M12 6a6 6 0 0 1 6 6"></path></svg>
+                    OFFSET
+                </div>
+                <div class="tool-btn" id="tool-chamfer" onclick="setTool('chamfer')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffaa00" stroke-width="2"><path d="M5 19v-6l6-6h8"></path></svg>
+                    CIMA/RACC
+                </div>
+            </div>
+            <div class="text-[9px] text-gray-500 text-center mt-auto font-bold">MODIFICA</div>
+        </div>
+
+        <!-- Gruppo Utility / Layers -->
+        <div class="ribbon-group">
+            <div class="flex gap-1">
+                <div class="tool-btn" id="btn-layers" onclick="toggleLayerManager()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+                    LAYERS
+                </div>
+                <div class="flex flex-col justify-center items-start px-2 min-w-[80px]">
+                    <div class="text-[10px] text-gray-400">Layer Attivo:</div>
+                    <div id="active-layer-display" class="text-[11px] font-bold text-white flex items-center gap-1">
+                        <div id="active-layer-swatch" class="w-2 h-2 rounded-full bg-white"></div>
+                        <span id="active-layer-name">0</span>
+                    </div>
+                </div>
+            </div>
+            <div class="text-[9px] text-gray-500 text-center mt-auto font-bold">PROPRIETÀ</div>
+        </div>
+    </div>
+
+    <!-- Canvas Area -->
+    <div class="flex-grow relative overflow-hidden bg-black">
+        <canvas id="cadCanvas"></canvas>
+
+        <!-- Input Dinamico -->
+        <div id="dynamic-input-container">
+            <div id="input-label" class="text-[10px] text-blue-300 mb-0.5 font-bold uppercase">Valore</div>
+            <input type="text" id="dim-input" placeholder="0.00" autocomplete="off">
+            <div id="input-hint" class="text-[9px] text-gray-400 mt-1 font-mono">INVIO per confermare</div>
+        </div>
+
+        <div id="snap-marker" class="absolute w-3 h-3 border border-green-400 bg-green-400/30 pointer-events-none hidden transform -translate-x-1/2 -translate-y-1/2"></div>
+
+        <div class="absolute bottom-4 left-4 flex gap-4 text-[10px] font-mono pointer-events-none z-10">
+            <div class="bg-black/60 px-2 py-1 border border-white/20 rounded">X: <span id="val-x">0</span></div>
+            <div class="bg-black/60 px-2 py-1 border border-white/20 rounded">Y: <span id="val-y">0</span></div>
+            <div class="bg-blue-600/80 px-2 py-1 rounded text-white font-bold" id="status-mode">LINEA</div>
+        </div>
+
+        <!-- Param Panel per Cima/Raccordo -->
+        <div id="chamfer-params" class="absolute top-4 right-4 bg-black/90 p-3 border border-white/20 rounded hidden text-[11px] flex flex-col gap-2 shadow-lg w-48 z-20">
+            <div class="text-blue-400 font-bold border-b border-white/10 pb-1 mb-1 uppercase flex justify-between">
+                <span>Impostazioni Cima</span>
+                <span id="chamfer-mode-label" class="text-xs text-yellow-400">SMUSSO</span>
+            </div>
+            
+            <div class="flex justify-between items-center gap-2">
+                <span class="text-gray-400 w-16">Distanza:</span> 
+                <div class="param-badge flex-grow text-center" id="badge-dist" onclick="manualParamInput('dist')">
+                    <span id="val-dist" class="font-mono text-white">20</span>
+                </div>
+                <span class="text-[9px] text-gray-600 bg-gray-800 px-1 rounded">D</span>
+            </div>
+            
+            <div class="flex justify-between items-center gap-2">
+                <span class="text-gray-400 w-16">Raggio:</span> 
+                <div class="param-badge flex-grow text-center" id="badge-rad" onclick="manualParamInput('rad')">
+                    <span id="val-radius" class="font-mono text-white">0</span>
+                </div>
+                <span class="text-[9px] text-gray-600 bg-gray-800 px-1 rounded">R</span>
+            </div>
+        </div>
+
+        <!-- Layer Manager Panel -->
+        <div id="layer-manager" class="absolute top-16 left-4 bg-[#252525] border border-[#555] rounded shadow-2xl w-[320px] hidden flex flex-col z-50">
+            <div class="bg-[#333] p-2 flex justify-between items-center border-b border-[#555] cursor-move" onmousedown="startDrag(event, 'layer-manager')">
+                <span class="font-bold text-xs text-white uppercase">Gestione Layer</span>
+                <button onclick="toggleLayerManager()" class="text-gray-400 hover:text-white">✕</button>
+            </div>
+            
+            <div class="p-2 border-b border-[#444] bg-[#2a2a2a] grid grid-columns-[1fr_auto] gap-2">
+                 <button onclick="createNewLayer()" class="bg-[#0078d4] hover:bg-[#106ebe] text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 w-full justify-center">
+                    <span>+ Nuovo Layer</span>
+                 </button>
+            </div>
+
+            <div class="text-[9px] text-gray-400 uppercase grid grid-cols-[24px_24px_30px_1fr_40px_40px] gap-1 px-2 py-1 border-b border-[#444] font-bold">
+                <span>Vis</span>
+                <span>Blc</span>
+                <span>Col</span>
+                <span>Nome</span>
+                <span>Spess</span>
+                <span>Tipo</span>
+            </div>
+
+            <div id="layer-list" class="max-h-[300px] overflow-y-auto bg-[#1e1e1e]">
+                <!-- Layer rows generati via JS -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="bg-[#2d2d2d] border-t border-black p-1 flex justify-between text-[11px] items-center h-[30px]">
+        <div class="flex gap-2">
+            <button id="btn-ortho" onclick="toggleOrtho()" class="px-3 py-0.5 bg-[#444] rounded hover:bg-[#555]">ORTHO F8</button>
+            <button id="btn-snap" onclick="toggleSnap()" class="px-3 py-0.5 bg-blue-600 rounded hover:bg-blue-500">SNAP F3</button>
+            <button id="btn-grid" onclick="toggleGrid()" class="px-3 py-0.5 bg-blue-600 rounded hover:bg-blue-500">GRID F7</button>
+        </div>
+        <div class="text-gray-400 flex items-center gap-3">
+            <span id="prompt-msg" class="text-yellow-400 font-bold">Inizio disegno</span>
+            <span class="border-l border-gray-600 pl-3">Zoom: <span id="zoom-disp">100%</span></span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('cadCanvas');
+        const ctx = canvas.getContext('2d');
+        const dimInput = document.getElementById('dim-input');
+        const dimContainer = document.getElementById('dynamic-input-container');
+        const snapMarker = document.getElementById('snap-marker');
+        const promptMsg = document.getElementById('prompt-msg');
+        const chamferParamsPanel = document.getElementById('chamfer-params');
+        const layerManager = document.getElementById('layer-manager');
+        const layerList = document.getElementById('layer-list');
+
+        let shapes = [];
+        let currentTool = 'line';
+        
+        let isDrawing = false;
+        let isPanning = false;
+        let startPt = null;
+        let currentPt = null;
+        
+        let arcStep = 0; 
+        let arcCenter = null;
+        let arcStart = null;
+        let arcRadius = 0;
+
+        // Polyline state
+        let polyPoints = []; 
+
+        let chamferSelection = [];
+        let chamferDist = 20;
+        let chamferRadius = 0;
+
+        let camera = { x: 0, y: 0, zoom: 1 };
+        let orthoMode = false;
+        let snapMode = true;
+        let gridVisible = true;
+        
+        let history = [];
+        let redoStack = [];
+
+        // --- LAYER SYSTEM ---
+        let layers = [
+            { id: '0', name: '0', color: '#ffffff', width: 2, type: 'solid', visible: true, locked: false }
+        ];
+        let currentLayerId = '0';
+
+        window.onload = () => {
+            resize();
+            saveHistory();
+            requestAnimationFrame(renderLoop);
+            setTool('line');
+            updateChamferUI();
+            updateLayerUI();
+        };
+
+        window.onresize = resize;
+
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+
+        // --- LAYER LOGIC ---
+        function toggleLayerManager() {
+            layerManager.style.display = layerManager.style.display === 'flex' ? 'none' : 'flex';
+            if (layerManager.style.display === 'flex') renderLayerList();
+            document.getElementById('btn-layers').classList.toggle('active', layerManager.style.display === 'flex');
+        }
+
+        function createNewLayer() {
+            const id = 'layer_' + Date.now();
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff', '#aaaaaa'];
+            const randomColor = colors[layers.length % colors.length];
+            layers.push({
+                id: id,
+                name: 'Layer ' + layers.length,
+                color: randomColor,
+                width: 2,
+                type: 'solid',
+                visible: true,
+                locked: false
+            });
+            renderLayerList();
+        }
+
+        function setActiveLayer(id) {
+            currentLayerId = id;
+            updateLayerUI();
+            renderLayerList();
+        }
+
+        function toggleLayerVis(id) {
+            const l = layers.find(lay => lay.id === id);
+            if (l) l.visible = !l.visible;
+            renderLayerList();
+        }
+
+        function toggleLayerLock(id) {
+            const l = layers.find(lay => lay.id === id);
+            if (l) l.locked = !l.locked;
+            renderLayerList();
+        }
+
+        function updateLayerUI() {
+            const l = layers.find(lay => lay.id === currentLayerId) || layers[0];
+            document.getElementById('active-layer-name').innerText = l.name;
+            document.getElementById('active-layer-swatch').style.backgroundColor = l.color;
+        }
+
+        function renderLayerList() {
+            layerList.innerHTML = '';
+            layers.forEach(l => {
+                const row = document.createElement('div');
+                row.className = `layer-row ${l.id === currentLayerId ? 'active-layer' : ''}`;
+                
+                // Icone SVG
+                const eyeIcon = l.visible 
+                    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
+                    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+
+                const lockIcon = l.locked
+                    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`
+                    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>`;
+
+                row.innerHTML = `
+                    <div class="icon-btn flex justify-center" onclick="toggleLayerVis('${l.id}')">${eyeIcon}</div>
+                    <div class="icon-btn flex justify-center" onclick="toggleLayerLock('${l.id}')">${lockIcon}</div>
+                    <div class="flex justify-center"><input type="color" value="${l.color}" class="layer-color-swatch bg-transparent p-0 border-none" onchange="updateLayerProp('${l.id}', 'color', this.value)"></div>
+                    <input type="text" value="${l.name}" class="bg-transparent border-none text-gray-200 w-full focus:bg-[#444] outline-none px-1" onchange="updateLayerProp('${l.id}', 'name', this.value)" onclick="setActiveLayer('${l.id}')">
+                    <input type="number" value="${l.width}" min="1" max="10" class="bg-[#333] border border-[#555] text-white w-full text-center" onchange="updateLayerProp('${l.id}', 'width', this.value)">
+                    <select class="bg-[#333] border border-[#555] text-[9px] text-white w-full" onchange="updateLayerProp('${l.id}', 'type', this.value)">
+                        <option value="solid" ${l.type==='solid'?'selected':''}>Continuo</option>
+                        <option value="dashed" ${l.type==='dashed'?'selected':''}>Tratteggiato</option>
+                        <option value="dotted" ${l.type==='dotted'?'selected':''}>Punteggiato</option>
+                        <option value="dashdot" ${l.type==='dashdot'?'selected':''}>Tratto-Punto</option>
+                        <option value="border" ${l.type==='border'?'selected':''}>Fantasma</option>
+                    </select>
+                `;
+                layerList.appendChild(row);
+            });
+        }
+
+        window.updateLayerProp = (id, prop, val) => {
+            const l = layers.find(lay => lay.id === id);
+            if (l) {
+                l[prop] = prop === 'width' ? parseInt(val) : val;
+                if (id === currentLayerId) updateLayerUI();
+                saveHistory();
+            }
+        };
+
+        // Drag functionality for layer manager
+        let dragItem = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        window.startDrag = (e, id) => {
+            dragItem = document.getElementById(id);
+            const rect = dragItem.getBoundingClientRect();
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+            window.addEventListener('mousemove', onDrag);
+            window.addEventListener('mouseup', stopDrag);
+        };
+        function onDrag(e) {
+            if (!dragItem) return;
+            dragItem.style.left = (e.clientX - dragOffsetX) + 'px';
+            dragItem.style.top = (e.clientY - dragOffsetY) + 'px';
+        }
+        function stopDrag() {
+            dragItem = null;
+            window.removeEventListener('mousemove', onDrag);
+            window.removeEventListener('mouseup', stopDrag);
+        }
+
+        // --- HISTORY ---
+        function saveHistory() {
+            history.push(JSON.stringify({ shapes, layers }));
+            if (history.length > 50) history.shift();
+            redoStack = [];
+        }
+
+        function undo() {
+            if (history.length <= 1) return;
+            redoStack.push(history.pop());
+            const state = JSON.parse(history[history.length - 1]);
+            shapes = state.shapes;
+            layers = state.layers || layers;
+            renderLayerList();
+            updateLayerUI();
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            const state = JSON.parse(redoStack.pop());
+            history.push(JSON.stringify(state));
+            shapes = state.shapes;
+            layers = state.layers || layers;
+            renderLayerList();
+            updateLayerUI();
+        }
+
+        // --- GESTIONE INPUT ---
+        function manualParamInput(type) {
+            dimContainer.style.display = 'block';
+            dimContainer.style.left = (canvas.width / 2) + 'px';
+            dimContainer.style.top = (canvas.height / 2) + 'px';
+            
+            if (type === 'dist') {
+                document.getElementById('input-label').innerText = "IMPOSTA DISTANZA SMUSSO";
+                dimInput.value = chamferDist;
+            } else {
+                document.getElementById('input-label').innerText = "IMPOSTA RAGGIO RACCORDO";
+                dimInput.value = chamferRadius;
+            }
+            dimInput.select();
+            dimInput.focus();
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+            if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+
+            if (e.key === "F8") { toggleOrtho(); return; }
+            if (e.key === "F3") { toggleSnap(); return; }
+            if (e.key === "F7") { toggleGrid(); return; }
+
+            if (currentTool === 'chamfer' && document.activeElement !== dimInput) {
+                if (e.key.toLowerCase() === 'd') { e.preventDefault(); manualParamInput('dist'); return; }
+                if (e.key.toLowerCase() === 'r') { e.preventDefault(); manualParamInput('rad'); return; }
+            }
+
+            // Enter per Polilinea
+            if (e.key === 'Enter' && currentTool === 'polyline' && polyPoints.length > 1) {
+                confirmShape();
+                return;
+            }
+
+            if (/^[0-9.-]$/.test(e.key) && document.activeElement !== dimInput) {
+                dimContainer.style.display = 'block';
+                if(currentPt) {
+                   const screen = worldToScreen(currentPt);
+                   dimContainer.style.left = (screen.x + 20) + 'px';
+                   dimContainer.style.top = (screen.y + 20) + 'px'; 
+                }
+                dimInput.focus();
+            }
+
+            if (e.key === 'Enter') {
+                const val = parseFloat(dimInput.value);
+                if (!isNaN(val)) {
+                    if (currentTool === 'chamfer') {
+                        const label = document.getElementById('input-label').innerText;
+                        if (label.includes("RAGGIO")) {
+                            chamferRadius = Math.abs(val);
+                            if(chamferRadius > 0) updatePrompt("Raggio impostato. Seleziona le linee.");
+                        } else {
+                            chamferDist = Math.abs(val);
+                            if(chamferRadius > 0) chamferRadius = 0; 
+                            updatePrompt("Distanza impostata. Seleziona le linee.");
+                        }
+                        updateChamferUI();
+                    } else if (isDrawing) {
+                        confirmShape(val);
+                    }
+                }
+                dimInput.value = "";
+                dimInput.blur();
+                if (!isDrawing && currentTool !== 'chamfer') dimContainer.style.display = 'none';
+                else if (currentTool === 'chamfer') dimContainer.style.display = 'none';
+            }
+
+            if (e.key === 'Escape') cancelDrawing();
+        });
+
+        function updateChamferUI() {
+            document.getElementById('val-dist').innerText = chamferDist;
+            document.getElementById('val-radius').innerText = chamferRadius;
+            const badgeDist = document.getElementById('badge-dist');
+            const badgeRad = document.getElementById('badge-rad');
+            const modeLabel = document.getElementById('chamfer-mode-label');
+
+            if (chamferRadius > 0) {
+                badgeRad.classList.add('param-active');
+                badgeDist.classList.remove('param-active');
+                badgeDist.style.opacity = "0.5";
+                modeLabel.innerText = "RACCORDO (CURVO)";
+                modeLabel.className = "text-xs text-green-400 font-bold";
+            } else {
+                badgeDist.classList.add('param-active');
+                badgeRad.classList.remove('param-active');
+                badgeDist.style.opacity = "1";
+                modeLabel.innerText = "SMUSSO (RETTO)";
+                modeLabel.className = "text-xs text-yellow-400 font-bold";
+            }
+        }
+
+        function setTool(tool) {
+            currentTool = tool;
+            cancelDrawing();
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            if(document.getElementById('tool-'+tool)) document.getElementById('tool-'+tool).classList.add('active');
+            document.getElementById('status-mode').innerText = tool.toUpperCase();
+            
+            chamferParamsPanel.style.display = (tool === 'chamfer') ? 'flex' : 'none';
+            updatePrompt();
+        }
+
+        function updatePrompt(customMsg) {
+            if(customMsg) { promptMsg.innerText = customMsg; return; }
+            const prompts = {
+                line: "Specificare primo punto",
+                polyline: "Punto successivo (INVIO per chiudere)",
+                circle: "Specificare centro",
+                arc: arcStep === 0 ? "Centro dell'arco" : (arcStep === 1 ? "Inizio dell'arco (Raggio)" : "Fine dell'arco (Angolo)"),
+                rect: "Primo angolo",
+                trim: "Seleziona oggetto da eliminare",
+                offset: "Seleziona linea per offset",
+                chamfer: chamferSelection.length === 0 ? "Seleziona prima linea" : "Seleziona seconda linea"
+            };
+            promptMsg.innerText = prompts[currentTool] || "";
+        }
+
+        function cancelDrawing() {
+            isDrawing = false;
+            startPt = null;
+            arcStep = 0;
+            arcCenter = null;
+            arcStart = null;
+            polyPoints = [];
+            chamferSelection = [];
+            dimContainer.style.display = 'none';
+            document.getElementById('input-label').innerText = "Valore";
+            updatePrompt();
+        }
+
+        function findIntersection(l1, l2) {
+            const x1 = l1.x1, y1 = l1.y1, x2 = l1.x2, y2 = l1.y2;
+            const x3 = l2.x1, y3 = l2.y1, x4 = l2.x2, y2_ = l2.y2;
+            const den = (x1 - x2) * (y3 - y2_) - (y1 - y2) * (x3 - x4);
+            if (den === 0) return null;
+            const px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y2_ - y3 * x4)) / den;
+            const py = ((x1 * y2 - y1 * x2) * (y3 - y2_) - (y1 - y2) * (x3 * y2_ - y3 * x4)) / den;
+            return { x: px, y: py };
+        }
+
+        function handleChamfer() {
+            if (chamferSelection.length < 2) return;
+            const l1 = chamferSelection[0];
+            const l2 = chamferSelection[1];
+            if (l1.type !== 'line' || l2.type !== 'line') { 
+                updatePrompt("Errore: Seleziona due linee rette.");
+                chamferSelection = []; 
+                return; 
+            }
+
+            const inter = findIntersection(l1, l2);
+            if (!inter) { 
+                updatePrompt("Errore: Le linee sono parallele.");
+                cancelDrawing(); 
+                return; 
+            }
+
+            const getDirAndFarPoint = (l, p) => {
+                const d1 = dist(l.x1, l.y1, p.x, p.y);
+                const d2 = dist(l.x2, l.y2, p.x, p.y);
+                const far = d1 > d2 ? {x:l.x1, y:l.y1} : {x:l.x2, y:l.y2};
+                const mag = dist(far.x, far.y, p.x, p.y);
+                return { x: (far.x - p.x)/mag, y: (far.y - p.y)/mag, far, mag };
+            };
+
+            const dir1 = getDirAndFarPoint(l1, inter);
+            const dir2 = getDirAndFarPoint(l2, inter);
+
+            shapes = shapes.filter(s => s !== l1 && s !== l2);
+
+            const activeLay = currentLayerId; 
+
+            if (chamferRadius > 0) {
+                const dot = dir1.x * dir2.x + dir1.y * dir2.y;
+                const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+                const tDist = chamferRadius / Math.tan(angle/2);
+                
+                const p1 = { x: inter.x + dir1.x * tDist, y: inter.y + dir1.y * tDist };
+                const p2 = { x: inter.x + dir2.x * tDist, y: inter.y + dir2.y * tDist };
+                
+                shapes.push({ type: 'line', x1: dir1.far.x, y1: dir1.far.y, x2: p1.x, y2: p1.y, layer: activeLay });
+                shapes.push({ type: 'line', x1: dir2.far.x, y1: dir2.far.y, x2: p2.x, y2: p2.y, layer: activeLay });
+                
+                const bisector = { x: dir1.x + dir2.x, y: dir1.y + dir2.y };
+                const bLen = Math.sqrt(bisector.x**2 + bisector.y**2);
+                const dCenter = chamferRadius / Math.sin(angle/2);
+                
+                const center = { x: inter.x + (bisector.x/bLen)*dCenter, y: inter.y + (bisector.y/bLen)*dCenter };
+                const a1 = Math.atan2(p1.y - center.y, p1.x - center.x);
+                const a2 = Math.atan2(p2.y - center.y, p2.x - center.x);
+                
+                shapes.push({ type: 'arc', cx: center.x, cy: center.y, r: chamferRadius, sa: a1, ea: a2, layer: activeLay });
+            } else {
+                const p1 = { x: inter.x + dir1.x * chamferDist, y: inter.y + dir1.y * chamferDist };
+                const p2 = { x: inter.x + dir2.x * chamferDist, y: inter.y + dir2.y * chamferDist };
+
+                shapes.push({ type: 'line', x1: dir1.far.x, y1: dir1.far.y, x2: p1.x, y2: p1.y, layer: activeLay });
+                shapes.push({ type: 'line', x1: dir2.far.x, y1: dir2.far.y, x2: p2.x, y2: p2.y, layer: activeLay });
+                shapes.push({ type: 'line', x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, layer: activeLay });
+            }
+
+            saveHistory();
+            chamferSelection = [];
+            updatePrompt("Operazione completata.");
+        }
+
+        canvas.onmousedown = (e) => {
+            if (e.button !== 0) { isPanning = true; return; }
+            
+            const raw = getWorldPos(e);
+            const snapped = getSnapPoint(raw);
+            const pos = snapped || raw;
+
+            // Seleziona oggetto (verifica layer bloccato)
+            const target = shapes.find(s => isNearShape(raw, s));
+
+            // Logica Selezione per Chamfer/Trim/Offset
+            if (['chamfer', 'trim', 'offset'].includes(currentTool)) {
+                if (target) {
+                    const l = layers.find(lay => lay.id === (target.layer || '0'));
+                    if (l && l.locked) {
+                        updatePrompt("Impossibile modificare: Layer Bloccato");
+                        return;
+                    }
+                }
+
+                if (currentTool === 'chamfer') {
+                    if (target && target.type === 'line') {
+                        if (!chamferSelection.includes(target)) {
+                            chamferSelection.push(target);
+                            if (chamferSelection.length === 2) handleChamfer();
+                            else updatePrompt("Seleziona la seconda linea...");
+                        }
+                    }
+                    return;
+                }
+
+                if (target) {
+                    if (currentTool === 'trim') { 
+                        shapes = shapes.filter(s => s !== target); 
+                        saveHistory(); 
+                    }
+                    else if (currentTool === 'offset') {
+                        const s = target;
+                        const d = 20; 
+                        if(s.type === 'line') {
+                            const dx = s.x2-s.x1, dy = s.y2-s.y1, len = Math.sqrt(dx*dx+dy*dy);
+                            const nx = -dy/len * d, ny = dx/len * d;
+                            shapes.push({...s, x1: s.x1+nx, y1: s.y1+ny, x2: s.x2+nx, y2: s.y2+ny, layer: currentLayerId});
+                            saveHistory();
+                        }
+                    }
+                    return;
+                }
+                return;
+            }
+
+            if (currentTool === 'arc') {
+                if (arcStep === 0) { arcCenter = pos; arcStep = 1; isDrawing = true; startPt = pos; }
+                else if (arcStep === 1) { arcStart = pos; arcRadius = dist(arcCenter.x, arcCenter.y, arcStart.x, arcStart.y); arcStep = 2; }
+                else if (arcStep === 2) { currentPt = pos; confirmShape(); }
+                updatePrompt();
+                return;
+            }
+
+            if (currentTool === 'polyline') {
+                if (!isDrawing) {
+                    isDrawing = true;
+                    polyPoints = [pos];
+                    startPt = pos; // per ortho
+                } else {
+                    // Check close loop
+                    if (polyPoints.length > 2 && dist(pos.x, pos.y, polyPoints[0].x, polyPoints[0].y) < 10/camera.zoom) {
+                        polyPoints.push({x: polyPoints[0].x, y: polyPoints[0].y}); // Close it
+                        confirmShape();
+                        return;
+                    }
+                    polyPoints.push(pos);
+                    startPt = pos; // update start for next segment
+                }
+                currentPt = pos;
+                updatePrompt("Punto successivo...");
+                return;
+            }
+
+            if (isDrawing) {
+                confirmShape();
+            } else {
+                isDrawing = true;
+                startPt = pos;
+                currentPt = pos;
+                dimContainer.style.display = 'block';
+                document.getElementById('input-label').innerText = "LUNGHEZZA / VALORE";
+                dimInput.value = "";
+                dimInput.focus();
+            }
+        };
+
+        window.onmousemove = (e) => {
+            const raw = getWorldPos(e);
+            document.getElementById('val-x').innerText = Math.round(raw.x);
+            document.getElementById('val-y').innerText = Math.round(raw.y);
+
+            if (isPanning) {
+                camera.x -= e.movementX / camera.zoom;
+                camera.y -= e.movementY / camera.zoom;
+                return;
+            }
+
+            const snapped = getSnapPoint(raw);
+            if (snapped) {
+                const screen = worldToScreen(snapped);
+                snapMarker.style.left = screen.x + 'px';
+                snapMarker.style.top = screen.y + 'px';
+                snapMarker.classList.remove('hidden');
+            } else {
+                snapMarker.classList.add('hidden');
+            }
+
+            if (isDrawing) {
+                let pos = snapped || raw;
+                if (orthoMode && currentTool !== 'arc' && startPt) {
+                    if (Math.abs(pos.x - startPt.x) > Math.abs(pos.y - startPt.y)) pos.y = startPt.y;
+                    else pos.x = startPt.x;
+                }
+                currentPt = pos;
+                
+                if (document.activeElement !== dimInput) {
+                    const screenPos = worldToScreen(pos);
+                    dimContainer.style.left = (screenPos.x + 20) + 'px';
+                    dimContainer.style.top = (screenPos.y + 20) + 'px';
+                    
+                    if (currentTool === 'arc' && arcStep === 2 && arcCenter) {
+                        const a = Math.atan2(pos.y - arcCenter.y, pos.x - arcCenter.x) * (180/Math.PI);
+                        dimInput.placeholder = a.toFixed(1) + "°";
+                    } else if (startPt) {
+                        dimInput.placeholder = dist(startPt.x, startPt.y, currentPt.x, currentPt.y).toFixed(2);
+                    }
+                }
+            }
+        };
+
+        window.onmouseup = () => isPanning = false;
+
+        function confirmShape(forcedVal) {
+            if (!isDrawing) return;
+
+            let s = { type: currentTool, layer: currentLayerId };
+
+            if (currentTool === 'polyline') {
+                if (polyPoints.length < 2) return;
+                // Se è un commit manuale (es. Enter), aggiungi l'ultimo punto corrente se non duplicato
+                if (forcedVal === undefined && currentPt && dist(currentPt.x, currentPt.y, polyPoints[polyPoints.length-1].x, polyPoints[polyPoints.length-1].y) > 0.1) {
+                    // Solo se non stiamo chiudendo loop col mouse
+                }
+                s = { type: 'polyline', points: [...polyPoints], layer: currentLayerId };
+                shapes.push(s);
+                polyPoints = [];
+                saveHistory();
+                cancelDrawing();
+                return;
+            }
+
+            if (currentTool === 'arc') {
+                if (!arcCenter || !arcStart || !currentPt) return;
+                const sa = Math.atan2(arcStart.y - arcCenter.y, arcStart.x - arcCenter.x);
+                let ea = Math.atan2(currentPt.y - arcCenter.y, currentPt.x - arcCenter.x);
+                let diff = ea - sa;
+                while(diff <= 0) diff += Math.PI*2;
+                if (forcedVal !== undefined) ea = sa + (forcedVal * Math.PI / 180);
+                s = { type: 'arc', cx: arcCenter.x, cy: arcCenter.y, r: arcRadius, sa, ea, layer: currentLayerId };
+            } else {
+                if (!startPt || !currentPt) return;
+                const d = forcedVal || dist(startPt.x, startPt.y, currentPt.x, currentPt.y);
+                if (forcedVal) {
+                    const ang = Math.atan2(currentPt.y - startPt.y, currentPt.x - startPt.x);
+                    currentPt = { x: startPt.x + Math.cos(ang) * d, y: startPt.y + Math.sin(ang) * d };
+                }
+                if (currentTool === 'line' || currentTool === 'rect') {
+                    s.x1 = startPt.x; s.y1 = startPt.y; s.x2 = currentPt.x; s.y2 = currentPt.y;
+                } else if (currentTool === 'circle') {
+                    s.cx = startPt.x; s.cy = startPt.y; s.r = d;
+                }
+            }
+            
+            shapes.push(s);
+            saveHistory();
+            cancelDrawing();
+        }
+
+        function dist(x1, y1, x2, y2) { return Math.sqrt((x2-x1)**2 + (y2-y1)**2); }
+        function getWorldPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (e.clientX - rect.left - canvas.width/2) / camera.zoom + camera.x,
+                y: (e.clientY - rect.top - canvas.height/2) / camera.zoom + camera.y
+            };
+        }
+        function worldToScreen(p) {
+            return {
+                x: (p.x - camera.x) * camera.zoom + canvas.width/2,
+                y: (p.y - camera.y) * camera.zoom + canvas.height/2
+            };
+        }
+
+        function getSnapPoint(pos) {
+            if (!snapMode) return null;
+            const t = 15 / camera.zoom;
+            for (let s of shapes) {
+                // Ignore hidden layers for snap
+                const l = layers.find(lay => lay.id === (s.layer || '0'));
+                if (l && !l.visible) continue;
+
+                let pts = [];
+                
+                // Endpoints / Centers
+                if (s.x1 !== undefined) pts.push({x:s.x1,y:s.y1}, {x:s.x2,y:s.y2});
+                if (s.cx !== undefined) pts.push({x:s.cx,y:s.cy});
+
+                // --- ADVANCED SNAPS ---
+                
+                // Midpoints (Line/Rect)
+                if (s.type === 'line') {
+                    pts.push({ x: (s.x1 + s.x2)/2, y: (s.y1 + s.y2)/2 });
+                }
+                if (s.type === 'rect') {
+                    pts.push({ x: (s.x1 + s.x2)/2, y: s.y1 }); // Top Mid
+                    pts.push({ x: (s.x1 + s.x2)/2, y: s.y2 }); // Bottom Mid
+                    pts.push({ x: s.x1, y: (s.y1 + s.y2)/2 }); // Left Mid
+                    pts.push({ x: s.x2, y: (s.y1 + s.y2)/2 }); // Right Mid
+                }
+
+                // Quadrants (Circle/Arc)
+                if (s.type === 'circle' || s.type === 'arc') {
+                    pts.push({ x: s.cx + s.r, y: s.cy }); // Right
+                    pts.push({ x: s.cx - s.r, y: s.cy }); // Left
+                    pts.push({ x: s.cx, y: s.cy + s.r }); // Bottom
+                    pts.push({ x: s.cx, y: s.cy - s.r }); // Top
+                }
+
+                // Polyline Points
+                if (s.type === 'polyline' && s.points) {
+                    s.points.forEach(p => pts.push(p));
+                }
+
+                for (let p of pts) if (dist(p.x, p.y, pos.x, pos.y) < t) return p;
+            }
+            return null;
+        }
+
+        function isNearShape(p, s) {
+            const l = layers.find(lay => lay.id === (s.layer || '0'));
+            if (l && !l.visible) return false;
+
+            const t = 10 / camera.zoom;
+            if (s.type === 'line') {
+                const l2 = dist(s.x1, s.y1, s.x2, s.y2)**2;
+                if (l2 === 0) return dist(p.x, p.y, s.x1, s.y1) < t;
+                let r = ((p.x-s.x1)*(s.x2-s.x1) + (p.y-s.y1)*(s.y2-s.y1)) / l2;
+                if (r < 0 || r > 1) return false;
+                const d = Math.abs((s.y2-s.y1)*p.x - (s.x2-s.x1)*p.y + s.x2*s.y1 - s.y2*s.x1) / Math.sqrt(l2);
+                return d < t;
+            }
+            if (s.type === 'circle' || s.type === 'arc') {
+                const d = dist(p.x, p.y, s.cx, s.cy);
+                return Math.abs(d - s.r) < t;
+            }
+            if (s.type === 'polyline') {
+                for(let i=0; i<s.points.length-1; i++) {
+                    const p1 = s.points[i], p2 = s.points[i+1];
+                    const l2 = dist(p1.x, p1.y, p2.x, p2.y)**2;
+                    if(l2 === 0) continue;
+                    let r = ((p.x-p1.x)*(p2.x-p1.x) + (p.y-p1.y)*(p2.y-p1.y)) / l2;
+                    if(r >= 0 && r <= 1) {
+                        const d = Math.abs((p2.y-p1.y)*p.x - (p2.x-p1.x)*p.y + p2.x*p1.y - p2.y*p1.x) / Math.sqrt(l2);
+                        if(d < t) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(canvas.width/2, canvas.height/2);
+            ctx.scale(camera.zoom, camera.zoom);
+            ctx.translate(-camera.x, -camera.y);
+
+            if (gridVisible) {
+                const step = 100;
+                ctx.beginPath(); ctx.strokeStyle = '#222'; ctx.lineWidth = 1/camera.zoom;
+                const L = camera.x - (canvas.width/2)/camera.zoom;
+                const R = camera.x + (canvas.width/2)/camera.zoom;
+                const T = camera.y - (canvas.height/2)/camera.zoom;
+                const B = camera.y + (canvas.height/2)/camera.zoom;
+                for(let x = Math.floor(L/step)*step; x <= R; x += step) { ctx.moveTo(x, T); ctx.lineTo(x, B); }
+                for(let y = Math.floor(T/step)*step; y <= B; y += step) { ctx.moveTo(L, y); ctx.lineTo(R, y); }
+                ctx.stroke();
+            }
+
+            shapes.forEach(s => {
+                const l = layers.find(lay => lay.id === (s.layer || '0'));
+                if (l && !l.visible) return; 
+
+                const isSelected = chamferSelection.includes(s);
+                drawShape(s, false, isSelected, l);
+            });
+
+            if (isDrawing && currentPt) {
+                // Preview uses Active Layer
+                const activeL = layers.find(lay => lay.id === currentLayerId);
+                const color = activeL ? activeL.color : '#fff';
+                const width = (activeL ? activeL.width : 2) / camera.zoom;
+                
+                if (currentTool === 'arc') {
+                    if (arcStep === 1 && arcCenter) {
+                        ctx.beginPath(); ctx.strokeStyle = '#555'; ctx.setLineDash([5,5]);
+                        ctx.moveTo(arcCenter.x, arcCenter.y); ctx.lineTo(currentPt.x, currentPt.y);
+                        ctx.stroke(); ctx.setLineDash([]);
+                    } else if (arcStep === 2 && arcCenter && arcStart) {
+                        const sa = Math.atan2(arcStart.y - arcCenter.y, arcStart.x - arcCenter.x);
+                        const ea = Math.atan2(currentPt.y - arcCenter.y, currentPt.x - arcCenter.x);
+                        let diff = ea - sa;
+                        if (diff < 0) diff += Math.PI*2;
+                        
+                        ctx.beginPath();
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = width;
+                        ctx.arc(arcCenter.x, arcCenter.y, arcRadius, sa, ea, diff > Math.PI);
+                        ctx.stroke();
+                    }
+                } else if (currentTool === 'polyline') {
+                    // Draw existing segments
+                    if (polyPoints.length > 0) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = width;
+                        ctx.moveTo(polyPoints[0].x, polyPoints[0].y);
+                        for(let i=1; i<polyPoints.length; i++) ctx.lineTo(polyPoints[i].x, polyPoints[i].y);
+                        // Rubber band
+                        ctx.lineTo(currentPt.x, currentPt.y);
+                        ctx.stroke();
+                    }
+                } else if (startPt) {
+                    const d = dist(startPt.x, startPt.y, currentPt.x, currentPt.y);
+                    drawShape(
+                        { type: currentTool, x1:startPt.x, y1:startPt.y, x2:currentPt.x, y2:currentPt.y, cx:startPt.x, cy:startPt.y, r:d }, 
+                        true, 
+                        false, 
+                        activeL
+                    );
+                }
+            }
+
+            ctx.restore();
+            requestAnimationFrame(renderLoop);
+        }
+
+        function drawShape(s, isPrev, isSelected = false, layerObj = null) {
+            const layer = layerObj || layers.find(l => l.id === (s.layer || '0')) || layers[0];
+            
+            ctx.beginPath();
+            
+            ctx.strokeStyle = isSelected ? '#ffaa00' : (isPrev ? layer.color : layer.color);
+            ctx.lineWidth = (isSelected ? layer.width + 2 : layer.width) / camera.zoom;
+            
+            if (isPrev && !isSelected) ctx.globalAlpha = 0.6;
+
+            // Line Type Enhanced
+            let dash = [];
+            if (layer.type === 'dashed') dash = [10 / camera.zoom, 5 / camera.zoom];
+            else if (layer.type === 'dotted') dash = [2 / camera.zoom, 4 / camera.zoom];
+            else if (layer.type === 'dashdot') dash = [10 / camera.zoom, 4 / camera.zoom, 2 / camera.zoom, 4 / camera.zoom];
+            else if (layer.type === 'border') dash = [15 / camera.zoom, 5 / camera.zoom, 15 / camera.zoom, 5 / camera.zoom];
+            ctx.setLineDash(dash);
+
+            if (s.type === 'line') { ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); }
+            else if (s.type === 'rect') ctx.rect(s.x1, s.y1, s.x2-s.x1, s.y2-s.y1);
+            else if (s.type === 'circle') ctx.arc(s.cx, s.cy, s.r, 0, Math.PI*2);
+            else if (s.type === 'arc') {
+                let ccw = false;
+                if(s.ea < s.sa) ccw = true; 
+                if (Math.abs(s.ea - s.sa) > Math.PI) ccw = !ccw;
+                ctx.arc(s.cx, s.cy, s.r, s.sa, s.ea, ccw);
+            }
+            else if (s.type === 'polyline' && s.points.length > 0) {
+                ctx.moveTo(s.points[0].x, s.points[0].y);
+                for(let i=1; i<s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+            }
+            
+            ctx.stroke();
+            ctx.setLineDash([]); 
+            ctx.globalAlpha = 1.0;
+        }
+
+        canvas.onwheel = (e) => {
+            e.preventDefault();
+            const factor = e.deltaY > 0 ? 0.9 : 1.1;
+            camera.zoom = Math.max(0.1, Math.min(20, camera.zoom * factor));
+            document.getElementById('zoom-disp').innerText = Math.round(camera.zoom * 100) + "%";
+        };
+
+        function toggleOrtho() { orthoMode = !orthoMode; document.getElementById('btn-ortho').classList.toggle('bg-blue-600', orthoMode); }
+        function toggleSnap() { snapMode = !snapMode; document.getElementById('btn-snap').classList.toggle('bg-blue-600', snapMode); }
+        function toggleGrid() { gridVisible = !gridVisible; document.getElementById('btn-grid').classList.toggle('bg-blue-600', gridVisible); }
+
+        function exportPNG() {
+            const link = document.createElement('a');
+            link.download = 'disegno_cad.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+    </script>
+</body>
+</html>

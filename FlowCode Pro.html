@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowCode Pro - Advanced IDE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Scrollbar Pro Style */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        body {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: #0f172a; /* Dark theme base */
+            color: #e2e8f0;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 280px 4px 1fr 4px 300px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .resizer {
+            background-color: #1e293b;
+            cursor: col-resize;
+            transition: background-color 0.2s;
+            border-left: 1px solid #334155;
+            border-right: 1px solid #334155;
+        }
+        .resizer:hover, .resizer.dragging { background-color: #6366f1; }
+
+        .block-container {
+            min-height: 150px;
+            border: 2px dashed #334155;
+            border-radius: 8px;
+            padding: 20px;
+            background: #1e293b;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+            overflow-y: auto;
+        }
+        
+        .block-item {
+            cursor: grab;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            margin-bottom: 10px;
+            position: relative;
+            background: #28364d;
+            border-left: 4px solid #475569;
+            color: #f1f5f9;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        
+        .block-item:active { cursor: grabbing; transform: scale(1.01); z-index: 50; }
+        .block-item.dragging-now { opacity: 0.6; border: 2px dashed #6366f1 !important; }
+
+        .executing {
+            outline: 2px solid #fbbf24 !important;
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+            background-color: #334155 !important;
+        }
+
+        .nested-area {
+            margin-left: 20px;
+            margin-top: 8px;
+            border-left: 2px solid #64748b;
+            padding-left: 10px;
+            background: rgba(0,0,0,0.1);
+            min-height: 40px;
+            border-radius: 0 0 0 4px;
+        }
+
+        /* Input Styling */
+        input, select {
+            background-color: rgba(0,0,0,0.3);
+            border: 1px solid #475569;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            transition: border 0.2s;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #6366f1;
+            background-color: rgba(0,0,0,0.5);
+        }
+        input::placeholder { color: #64748b; }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-block { animation: slideIn 0.2s ease-out; }
+
+        /* Palette Categories */
+        .category-header {
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 2px;
+        }
+    </style>
+</head>
+<body class="font-sans text-sm">
+
+    <!-- Header -->
+    <header class="h-14 bg-slate-900 border-b border-slate-700 px-4 flex justify-between items-center z-50 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="bg-indigo-600 p-1.5 rounded text-white shadow-lg shadow-indigo-500/20">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-tight text-slate-100">FlowCode <span class="text-indigo-400">Pro</span></h1>
+                <p class="text-[10px] text-slate-500 -mt-1 font-mono">v3.5 Ultimate</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+            <button onclick="runProgram()" id="run-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-1.5 rounded text-xs font-bold shadow-lg shadow-emerald-900/50 flex items-center transition-all active:scale-95 border border-emerald-500">
+                <span class="mr-2">▶</span> ESEGUI
+            </button>
+        </div>
+    </header>
+
+    <div class="app-container" id="resizable-grid">
+        
+        <!-- Sidebar: Palette -->
+        <aside class="bg-slate-900 p-4 overflow-y-auto select-none">
+            
+            <div class="category-header mt-0 text-sky-400">Variabili & Memoria</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'decl')" class="p-2 bg-sky-900/40 border-l-4 border-sky-500 rounded text-xs hover:bg-sky-900/60 cursor-grab flex justify-between"><span>Dichiarazione</span> <span class="text-sky-500 text-[10px] font-mono">var</span></div>
+                <div draggable="true" ondragstart="onDragStart(event, 'assign')" class="p-2 bg-blue-900/40 border-l-4 border-blue-500 rounded text-xs hover:bg-blue-900/60 cursor-grab flex justify-between"><span>Assegnazione</span> <span class="text-blue-500 text-[10px] font-mono">=</span></div>
+                <div draggable="true" ondragstart="onDragStart(event, 'inc')" class="p-2 bg-indigo-900/40 border-l-4 border-indigo-500 rounded text-xs hover:bg-indigo-900/60 cursor-grab flex justify-between"><span>Incrementa</span> <span class="text-indigo-500 text-[10px] font-mono">++</span></div>
+            </div>
+
+            <div class="category-header text-orange-400">Matematica Avanzata</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'calc')" class="p-2 bg-orange-900/40 border-l-4 border-orange-500 rounded text-xs hover:bg-orange-900/60 cursor-grab flex justify-between"><span>Operazioni Base</span> <span class="text-orange-500 text-[10px] font-mono">+-*/</span></div>
+                <div draggable="true" ondragstart="onDragStart(event, 'math_pro')" class="p-2 bg-orange-900/40 border-l-4 border-orange-400 rounded text-xs hover:bg-orange-900/60 cursor-grab flex justify-between"><span>Math Pro</span> <span class="text-orange-400 text-[10px] font-mono">sin/sqrt</span></div>
+            </div>
+
+            <div class="category-header text-teal-400">Stringhe (Testo)</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'str_join')" class="p-2 bg-teal-900/40 border-l-4 border-teal-500 rounded text-xs hover:bg-teal-900/60 cursor-grab">Unisci Testo (Concat)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'str_info')" class="p-2 bg-teal-900/40 border-l-4 border-teal-600 rounded text-xs hover:bg-teal-900/60 cursor-grab">Info (Len/Maiusc)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'str_sub')" class="p-2 bg-teal-900/40 border-l-4 border-teal-400 rounded text-xs hover:bg-teal-900/60 cursor-grab">Sottostringa (Sub)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'str_replace')" class="p-2 bg-teal-900/40 border-l-4 border-teal-700 rounded text-xs hover:bg-teal-900/60 cursor-grab">Sostituisci (Replace)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'str_split')" class="p-2 bg-teal-900/40 border-l-4 border-teal-300 rounded text-xs hover:bg-teal-900/60 cursor-grab">Dividi in Lista (Split)</div>
+            </div>
+
+            <div class="category-header text-cyan-400">Liste & Array</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'list_new')" class="p-2 bg-cyan-900/40 border-l-4 border-cyan-500 rounded text-xs hover:bg-cyan-900/60 cursor-grab">Nuova Lista []</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'list_add')" class="p-2 bg-cyan-900/40 border-l-4 border-cyan-600 rounded text-xs hover:bg-cyan-900/60 cursor-grab">Aggiungi (Push)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'list_get')" class="p-2 bg-cyan-900/40 border-l-4 border-cyan-400 rounded text-xs hover:bg-cyan-900/60 cursor-grab">Leggi Valore [i]</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'list_set')" class="p-2 bg-cyan-900/40 border-l-4 border-cyan-700 rounded text-xs hover:bg-cyan-900/60 cursor-grab">Modifica Valore</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'list_op')" class="p-2 bg-cyan-900/40 border-l-4 border-cyan-300 rounded text-xs hover:bg-cyan-900/60 cursor-grab">Operazioni (Sort/Len)</div>
+            </div>
+
+            <div class="category-header text-purple-400">Logica di Controllo</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'if')" class="p-2 bg-indigo-900/40 border-l-4 border-indigo-500 rounded text-xs hover:bg-indigo-900/60 cursor-grab font-bold">SE (If Condition)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'while')" class="p-2 bg-purple-900/40 border-l-4 border-purple-500 rounded text-xs hover:bg-purple-900/60 cursor-grab font-bold">MENTRE (While Loop)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'repeat')" class="p-2 bg-fuchsia-900/40 border-l-4 border-fuchsia-500 rounded text-xs hover:bg-fuchsia-900/60 cursor-grab font-bold">RIPETI (For Loop)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'break')" class="p-2 bg-red-900/40 border-l-4 border-red-500 rounded text-xs hover:bg-red-900/60 cursor-grab text-red-300">INTERROMPI (Break)</div>
+            </div>
+
+            <div class="category-header text-pink-400">Randomizzazione Pro</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'rand_int')" class="p-2 bg-pink-900/40 border-l-4 border-pink-500 rounded text-xs hover:bg-pink-900/60 cursor-grab">Intero Casuale</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'rand_float')" class="p-2 bg-pink-900/40 border-l-4 border-pink-600 rounded text-xs hover:bg-pink-900/60 cursor-grab">Decimale Casuale</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'rand_bool')" class="p-2 bg-pink-900/40 border-l-4 border-pink-400 rounded text-xs hover:bg-pink-900/60 cursor-grab">Booleano Casuale</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'rand_color')" class="p-2 bg-rose-900/40 border-l-4 border-rose-500 rounded text-xs hover:bg-rose-900/60 cursor-grab">Colore HEX Casuale</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'rand_list_elem')" class="p-2 bg-rose-900/40 border-l-4 border-rose-400 rounded text-xs hover:bg-rose-900/60 cursor-grab">Elemento da Lista</div>
+            </div>
+
+            <div class="category-header text-emerald-400">Input / Output</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'input')" class="p-2 bg-emerald-900/40 border-l-4 border-emerald-500 rounded text-xs hover:bg-emerald-900/60 cursor-grab">Leggi Utente (Input)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'output')" class="p-2 bg-emerald-900/40 border-l-4 border-emerald-600 rounded text-xs hover:bg-emerald-900/60 cursor-grab">Scrivi Console (Print)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'wait')" class="p-2 bg-amber-900/40 border-l-4 border-amber-500 rounded text-xs hover:bg-amber-900/60 cursor-grab">Aspetta (Sleep)</div>
+            </div>
+            
+            <div class="h-20"></div> <!-- Spazio extra per scroll -->
+        </aside>
+
+        <div class="resizer" id="resizer-left"></div>
+
+        <!-- Editor Centrale -->
+        <main class="bg-slate-800 overflow-y-auto p-6 md:p-8 flex flex-col min-w-[300px]">
+            <div id="main-editor" class="block-container flex-1 shadow-inner overflow-x-hidden" ondrop="onDrop(event, 'main-editor')" ondragover="allowDrop(event)">
+                <div id="placeholder-msg" class="flex flex-col items-center justify-center h-full text-slate-500 pointer-events-none select-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    <p class="font-medium text-lg">Area di Sviluppo</p>
+                    <p class="text-xs mt-2 opacity-70">Trascina i componenti dalla barra laterale</p>
+                </div>
+            </div>
+        </main>
+
+        <div class="resizer" id="resizer-right"></div>
+
+        <!-- Sidebar Destra -->
+        <aside class="bg-slate-900 flex flex-col shadow-2xl overflow-hidden min-w-[200px] border-l border-slate-700">
+            <div class="p-3 border-b border-slate-700 flex justify-between items-center bg-slate-800">
+                <h2 class="text-emerald-400 font-mono text-xs font-bold uppercase tracking-widest flex items-center">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full mr-2 animate-pulse"></span>Console
+                </h2>
+                <button onclick="clearConsole()" class="text-slate-400 hover:text-white text-[10px] font-bold uppercase hover:bg-slate-700 px-2 py-1 rounded transition">Pulisci</button>
+            </div>
+            <div id="console-output" class="flex-1 p-4 font-mono text-xs text-emerald-300 overflow-y-auto space-y-1 bg-slate-950 font-medium leading-relaxed">
+                <div class="text-slate-600 italic">// Sistema pronto.</div>
+            </div>
+            
+            <div class="h-1/3 bg-slate-900 border-t border-slate-700 p-0 flex flex-col overflow-hidden">
+                <div class="p-2 bg-slate-800 text-[10px] font-bold text-indigo-300 uppercase tracking-widest border-b border-slate-700">Stack Variabili</div>
+                <div id="vars-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        let variables = {};
+        let isRunning = false;
+        let stopLoops = false;
+        let dragSrcEl = null;
+
+        // --- Resize Logic ---
+        const grid = document.getElementById('resizable-grid');
+        function setupResizer(resizer, index) {
+            let isDragging = false;
+            resizer.addEventListener('mousedown', () => { isDragging = true; resizer.classList.add('dragging'); document.body.style.cursor = 'col-resize'; });
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const containerRect = grid.getBoundingClientRect();
+                const columns = grid.style.gridTemplateColumns.split(' ');
+                if (index === 0) {
+                    const newWidth = e.clientX - containerRect.left;
+                    if (newWidth > 150 && newWidth < 500) columns[0] = `${newWidth}px`;
+                } else {
+                    const newWidth = containerRect.right - e.clientX;
+                    if (newWidth > 200 && newWidth < 600) columns[4] = `${newWidth}px`;
+                }
+                grid.style.gridTemplateColumns = columns.join(' ');
+            });
+            document.addEventListener('mouseup', () => { isDragging = false; resizer.classList.remove('dragging'); document.body.style.cursor = 'default'; });
+        }
+        setupResizer(document.getElementById('resizer-left'), 0);
+        setupResizer(document.getElementById('resizer-right'), 1);
+
+        // --- Drag & Drop ---
+        function allowDrop(ev) { ev.preventDefault(); }
+        function onDragStart(ev, type) { 
+            ev.dataTransfer.setData("type", type); 
+            ev.dataTransfer.effectAllowed = 'copy';
+        }
+
+        function handleDragStartInternal(e) {
+            dragSrcEl = this;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('internal-id', this.id);
+            this.classList.add('dragging-now');
+        }
+
+        function handleDragEndInternal(e) {
+            this.classList.remove('dragging-now');
+        }
+
+        function onDrop(ev, targetId) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            
+            const type = ev.dataTransfer.getData("type");
+            const internalId = ev.dataTransfer.getData("internal-id");
+            const placeholder = document.getElementById('placeholder-msg');
+            if (placeholder) placeholder.remove();
+
+            const targetContainer = document.getElementById(targetId);
+
+            if (internalId) {
+                const draggedEl = document.getElementById(internalId);
+                // FIX: Check if we are trying to drop a parent into its own children area
+                if (draggedEl.contains(targetContainer)) {
+                    log("ERRORE: Non puoi spostare un blocco dentro se stesso!", "text-red-400");
+                    return;
+                }
+                const afterElement = getDragAfterElement(targetContainer, ev.clientY);
+                if (afterElement == null) targetContainer.appendChild(draggedEl);
+                else targetContainer.insertBefore(draggedEl, afterElement);
+            } else if (type) {
+                const block = createBlockUI(type);
+                const afterElement = getDragAfterElement(targetContainer, ev.clientY);
+                if (afterElement == null) targetContainer.appendChild(block);
+                else targetContainer.insertBefore(block, afterElement);
+            }
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.children].filter(child => 
+                child.classList.contains('block-item') && !child.classList.contains('dragging-now')
+            );
+
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+                else return closest;
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // --- Block Creation ---
+        function createBlockUI(type) {
+            const id = 'block-' + Math.random().toString(36).substr(2, 9);
+            const div = document.createElement('div');
+            div.id = id;
+            div.dataset.type = type;
+            div.draggable = true;
+            div.className = "block-item animate-block p-3 rounded-md shadow-sm border-l-4 flex flex-col relative group";
+            
+            div.addEventListener('dragstart', handleDragStartInternal, false);
+            div.addEventListener('dragend', handleDragEndInternal, false);
+
+            let color = "border-slate-500";
+            let content = `<div class="flex flex-wrap items-center gap-2">`;
+
+            switch(type) {
+                case 'decl':
+                    color = "border-sky-500";
+                    content += `<span class="font-bold text-sky-400 text-xs">VAR</span><input class="w-20 font-bold" placeholder="nome" data-key="name"><span class="text-xs text-slate-400">tipo</span><select data-key="vtype"><option value="string">String</option><option value="int">Int</option><option value="float">Float</option><option value="bool">Bool</option></select>`;
+                    break;
+                case 'assign':
+                    color = "border-blue-500";
+                    content += `<input class="w-20 font-bold text-blue-300" placeholder="Variabile" data-key="var"><span class="font-bold text-slate-400">=</span><input class="w-32" placeholder="Valore/Espressione" data-key="val">`;
+                    break;
+                case 'inc':
+                    color = "border-indigo-500";
+                    content += `<span class="font-bold text-indigo-400 text-xs">INC</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-indigo-300">++</span>`;
+                    break;
+                
+                // MATH
+                case 'calc':
+                    color = "border-orange-500";
+                    content += `<span class="font-bold text-orange-500 text-xs">CALC</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-16" placeholder="A" data-key="a"><select data-key="op" class="font-bold text-orange-400"><option value="+">+</option><option value="-">-</option><option value="*">×</option><option value="/">÷</option><option value="%">MOD</option><option value="^">POW</option></select><input class="w-16" placeholder="B" data-key="b">`;
+                    break;
+                case 'math_pro':
+                    color = "border-orange-600";
+                    content += `<span class="font-bold text-orange-600 text-xs">MATH</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="sqrt">Radice Quadra</option><option value="sin">Seno</option><option value="cos">Coseno</option><option value="tan">Tangente</option><option value="abs">Assoluto</option><option value="round">Arrotonda</option><option value="floor">Difetto (Floor)</option><option value="ceil">Eccesso (Ceil)</option></select><span class="text-xs">(</span><input class="w-16" placeholder="Val" data-key="val"><span class="text-xs">)</span>`;
+                    break;
+
+                // STRINGS
+                case 'str_join':
+                    color = "border-teal-500";
+                    content += `<span class="font-bold text-teal-500 text-xs">CONCAT</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo A" data-key="a"><span class="text-xs">+</span><input class="w-20" placeholder="Testo B" data-key="b">`;
+                    break;
+                case 'str_info':
+                    color = "border-teal-600";
+                    content += `<span class="font-bold text-teal-600 text-xs">STR INFO</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="upper">MAIUSCOLO</option><option value="lower">minuscolo</option></select><span class="text-xs">di</span><input class="w-20" placeholder="Testo" data-key="src">`;
+                    break;
+                case 'str_sub':
+                    color = "border-teal-400";
+                    content += `<span class="font-bold text-teal-400 text-xs">SUBSTR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">da</span><input type="number" class="w-10" value="0" data-key="start"><span class="text-[9px]">a</span><input type="number" class="w-10" value="5" data-key="end">`;
+                    break;
+                 case 'str_split':
+                    color = "border-teal-300";
+                    content += `<span class="font-bold text-teal-300 text-xs">SPLIT</span><input class="w-20 font-bold" placeholder="Lista Dest" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">su</span><input class="w-10" value="," data-key="delim">`;
+                    break;
+                 case 'str_replace':
+                    color = "border-teal-700";
+                    content += `<span class="font-bold text-teal-700 text-xs">REPLACE</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">:</span><input class="w-16" placeholder="Old" data-key="old"><span class="text-xs">→</span><input class="w-16" placeholder="New" data-key="new">`;
+                    break;
+
+                // LISTS
+                case 'list_new':
+                    color = "border-cyan-500";
+                    content += `<span class="font-bold text-cyan-500 text-xs">LISTA</span><input class="w-24 font-bold" placeholder="Nome Lista" data-key="var"><span class="text-xs text-cyan-400">= [] (Vuota)</span>`;
+                    break;
+                case 'list_add':
+                    color = "border-cyan-600";
+                    content += `<span class="font-bold text-cyan-600 text-xs">PUSH</span><input class="w-24" placeholder="Valore" data-key="val"><span class="text-xs">in</span><input class="w-24 font-bold" placeholder="Lista" data-key="list">`;
+                    break;
+                case 'list_get':
+                    color = "border-cyan-400";
+                    content += `<span class="font-bold text-cyan-400 text-xs">GET</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">]</span>`;
+                    break;
+                case 'list_set':
+                    color = "border-cyan-700";
+                    content += `<span class="font-bold text-cyan-700 text-xs">SET</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">] =</span><input class="w-20" placeholder="Val" data-key="val">`;
+                    break;
+                case 'list_op':
+                    color = "border-cyan-300";
+                    content += `<span class="font-bold text-cyan-300 text-xs">ARRAY OP</span><input class="w-20 font-bold" placeholder="Lista/Var" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="sort">Ordina (A-Z)</option><option value="reverse">Inverti</option><option value="shuffle">Mescola</option><option value="clear">Svuota</option></select><span class="text-xs">su</span><input class="w-20" placeholder="Lista" data-key="list">`;
+                    break;
+
+                // CONTROL
+                case 'if':
+                    color = "border-indigo-500";
+                    content += `<span class="font-bold text-indigo-400 text-xs">SE</span><input class="w-40 font-bold text-indigo-200" placeholder="condizione (es: x > 5)" data-key="cond"><span class="text-xs text-indigo-400">ALLORA:</span>`;
+                    break;
+                case 'while':
+                    color = "border-purple-500";
+                    content += `<span class="font-bold text-purple-400 text-xs">MENTRE</span><input class="w-40 font-bold text-purple-200" placeholder="condizione" data-key="cond"><span class="text-xs text-purple-400">FAI:</span>`;
+                    break;
+                case 'repeat':
+                    color = "border-fuchsia-500";
+                    content += `<span class="font-bold text-fuchsia-400 text-xs">RIPETI</span><input type="number" class="w-16" value="5" data-key="times"><span class="text-xs text-fuchsia-400">VOLTE:</span>`;
+                    break;
+                case 'break':
+                    color = "border-red-500";
+                    content += `<span class="font-bold text-red-500 text-xs">⛔ INTERROMPI CICLO</span>`;
+                    break;
+
+                // RANDOM
+                case 'rand_int':
+                    color = "border-pink-500";
+                    content += `<span class="font-bold text-pink-500 text-xs">RND INT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="100" data-key="max">`;
+                    break;
+                case 'rand_float':
+                    color = "border-pink-600";
+                    content += `<span class="font-bold text-pink-600 text-xs">RND FLOAT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0.0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="1.0" data-key="max">`;
+                    break;
+                case 'rand_bool':
+                    color = "border-pink-400";
+                    content += `<span class="font-bold text-pink-400 text-xs">RND BOOL</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`;
+                    break;
+                case 'rand_color':
+                    color = "border-rose-500";
+                    content += `<span class="font-bold text-rose-500 text-xs">RND HEX</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-rose-300">Genera #Colore</span>`;
+                    break;
+                case 'rand_list_elem':
+                    color = "border-rose-400";
+                    content += `<span class="font-bold text-rose-400 text-xs">PESCA</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">da</span><input class="w-20 font-bold" placeholder="Lista" data-key="list">`;
+                    break;
+
+                // IO
+                case 'input':
+                    color = "border-emerald-500";
+                    content += `<span class="font-bold text-emerald-500 text-xs">INPUT</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var">`;
+                    break;
+                case 'output':
+                    color = "border-emerald-600";
+                    content += `<span class="font-bold text-emerald-600 text-xs">PRINT</span><input class="w-48" placeholder="Messaggio o Variabile" data-key="msg">`;
+                    break;
+                case 'wait':
+                    color = "border-amber-500";
+                    content += `<span class="font-bold text-amber-500 text-xs">SLEEP</span><input type="number" step="0.1" class="w-16" value="1.0" data-key="sec"><span class="text-xs">s</span>`;
+                    break;
+            }
+
+            content += `<button onclick="removeBlock('${id}')" class="ml-auto text-slate-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>`;
+
+            if (['if', 'while', 'repeat'].includes(type)) {
+                content += `<div id="${id}-children" class="nested-area block-container min-h-[50px] border-dashed border-slate-600" ondrop="onDrop(event, '${id}-children')" ondragover="allowDrop(event)"></div>`;
+            }
+
+            div.innerHTML = content;
+            div.className += " " + color;
+            return div;
+        }
+
+        function removeBlock(id) { document.getElementById(id)?.remove(); }
+        function clearConsole() { document.getElementById('console-output').innerHTML = '<div class="text-slate-600 italic">// Console pulita.</div>'; }
+
+        // --- Interpreter ---
+        async function runProgram() {
+            if (isRunning) return;
+            isRunning = true;
+            stopLoops = false;
+            const btn = document.getElementById('run-btn');
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            
+            clearConsole();
+            variables = {};
+            updateVarsUI();
+            log("--- AVVIO PROGRAMMA ---", "text-slate-400");
+
+            const rootBlocks = Array.from(document.getElementById('main-editor').children).filter(el => el.id !== 'placeholder-msg');
+            try {
+                await executeBlockList(rootBlocks);
+            } catch (err) {
+                if (err.message !== "STOP") log(`ERRORE RUNTIME: ${err.message}`, "text-red-400 font-bold");
+            }
+
+            log("--- PROGRAMMA TERMINATO ---", "text-slate-400");
+            isRunning = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
+        async function executeBlockList(blockList) {
+            for (let blockEl of blockList) {
+                if (!isRunning || stopLoops) break;
+                
+                blockEl.classList.add('executing');
+                blockEl.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
+                
+                const type = blockEl.dataset.type;
+                const data = {};
+                blockEl.querySelectorAll('input, select').forEach(i => { 
+                    if(i.dataset.key) data[i.dataset.key] = i.value || ""; 
+                });
+
+                try {
+                    switch(type) {
+                        case 'decl':
+                            const dName = (data.name || "anon").trim();
+                            variables[dName] = { int:0, float:0.0, string:"", bool:false }[data.vtype] || 0;
+                            break;
+                        case 'assign':
+                            const aVar = (data.var || "").trim();
+                            if(aVar) variables[aVar] = evalInContext(data.val || "0");
+                            break;
+                        case 'inc':
+                            const iVar = (data.var || "").trim();
+                            if(iVar && typeof variables[iVar] === 'number') variables[iVar]++;
+                            break;
+                        
+                        // MATH
+                        case 'calc':
+                            const cDest = (data.dest || "").trim();
+                            const valA = Number(evalInContext(data.a || "0"));
+                            const valB = Number(evalInContext(data.b || "0"));
+                            if(cDest) {
+                                if(data.op === '+') variables[cDest] = valA + valB;
+                                else if(data.op === '-') variables[cDest] = valA - valB;
+                                else if(data.op === '*') variables[cDest] = valA * valB;
+                                else if(data.op === '/') variables[cDest] = valB !== 0 ? valA / valB : 0;
+                                else if(data.op === '%') variables[cDest] = valA % valB;
+                                else if(data.op === '^') variables[cDest] = Math.pow(valA, valB);
+                            }
+                            break;
+                        case 'math_pro':
+                            const mDest = (data.dest || "").trim();
+                            const mVal = Number(evalInContext(data.val || "0"));
+                            if (mDest) {
+                                switch(data.op) {
+                                    case 'sqrt': variables[mDest] = Math.sqrt(mVal); break;
+                                    case 'sin': variables[mDest] = Math.sin(mVal); break;
+                                    case 'cos': variables[mDest] = Math.cos(mVal); break;
+                                    case 'tan': variables[mDest] = Math.tan(mVal); break;
+                                    case 'abs': variables[mDest] = Math.abs(mVal); break;
+                                    case 'round': variables[mDest] = Math.round(mVal); break;
+                                    case 'floor': variables[mDest] = Math.floor(mVal); break;
+                                    case 'ceil': variables[mDest] = Math.ceil(mVal); break;
+                                }
+                            }
+                            break;
+
+                        // STRINGHE
+                        case 'str_join':
+                            const jDest = (data.dest || "").trim();
+                            const s1 = String(evalInContext(data.a || ""));
+                            const s2 = String(evalInContext(data.b || ""));
+                            if(jDest) variables[jDest] = s1 + s2;
+                            break;
+                        case 'str_info':
+                            const iDest = (data.dest || "").trim();
+                            const srcTxt = String(evalInContext(data.src || ""));
+                            if(iDest) {
+                                if(data.op === 'len') variables[iDest] = srcTxt.length;
+                                else if(data.op === 'upper') variables[iDest] = srcTxt.toUpperCase();
+                                else if(data.op === 'lower') variables[iDest] = srcTxt.toLowerCase();
+                            }
+                            break;
+                        case 'str_sub':
+                            const subDest = (data.dest || "").trim();
+                            const subSrc = String(evalInContext(data.src || ""));
+                            if(subDest) variables[subDest] = subSrc.substring(parseInt(data.start), parseInt(data.end));
+                            break;
+                        case 'str_split':
+                            const splitDest = (data.dest || "").trim();
+                            const splitSrc = String(evalInContext(data.src || ""));
+                            if(splitDest) variables[splitDest] = splitSrc.split(data.delim || ",");
+                            break;
+                        case 'str_replace':
+                            const rVar = (data.var || "").trim();
+                            const rOld = String(evalInContext(data.old || ""));
+                            const rNew = String(evalInContext(data.new || ""));
+                            if(rVar && variables[rVar]) variables[rVar] = String(variables[rVar]).replaceAll(rOld, rNew);
+                            break;
+
+                        // LISTE
+                        case 'list_new':
+                            const lVar = (data.var || "").trim();
+                            if(lVar) variables[lVar] = [];
+                            break;
+                        case 'list_add':
+                            const lList = (data.list || "").trim();
+                            const lVal = evalInContext(data.val || "0");
+                            if(lList && Array.isArray(variables[lList])) variables[lList].push(lVal);
+                            break;
+                        case 'list_get':
+                            const gDest = (data.dest || "").trim();
+                            const gList = (data.list || "").trim();
+                            const gIdx = parseInt(evalInContext(data.idx || "0"));
+                            if(gDest && Array.isArray(variables[gList])) variables[gDest] = variables[gList][gIdx];
+                            break;
+                        case 'list_set':
+                            const sList = (data.list || "").trim();
+                            const sIdx = parseInt(evalInContext(data.idx || "0"));
+                            const sVal = evalInContext(data.val || "0");
+                            if(sList && Array.isArray(variables[sList])) variables[sList][sIdx] = sVal;
+                            break;
+                        case 'list_op':
+                            const loDest = (data.dest || "").trim();
+                            const loList = (data.list || "").trim();
+                            const arr = variables[loList];
+                            if (Array.isArray(arr)) {
+                                if (data.op === 'len') variables[loDest] = arr.length;
+                                else if (data.op === 'sort') arr.sort();
+                                else if (data.op === 'reverse') arr.reverse();
+                                else if (data.op === 'shuffle') arr.sort(() => Math.random() - 0.5);
+                                else if (data.op === 'clear') variables[loList] = [];
+                            }
+                            break;
+
+                        // RANDOM
+                        case 'rand_int':
+                            const riVar = (data.var || "").trim();
+                            const riMin = parseInt(data.min) || 0;
+                            const riMax = parseInt(data.max) || 100;
+                            if(riVar) variables[riVar] = Math.floor(Math.random() * (riMax - riMin + 1)) + riMin;
+                            break;
+                        case 'rand_float':
+                            const rfVar = (data.var || "").trim();
+                            const rfMin = parseFloat(data.min) || 0;
+                            const rfMax = parseFloat(data.max) || 1;
+                            if(rfVar) variables[rfVar] = Math.random() * (rfMax - rfMin) + rfMin;
+                            break;
+                        case 'rand_bool':
+                            const rbVar = (data.var || "").trim();
+                            if(rbVar) variables[rbVar] = Math.random() >= 0.5;
+                            break;
+                        case 'rand_color':
+                            const rcVar = (data.var || "").trim();
+                            if(rcVar) variables[rcVar] = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+                            break;
+                        case 'rand_list_elem':
+                            const rleDest = (data.dest || "").trim();
+                            const rleList = (data.list || "").trim();
+                            if (rleDest && Array.isArray(variables[rleList]) && variables[rleList].length > 0) {
+                                const rndIdx = Math.floor(Math.random() * variables[rleList].length);
+                                variables[rleDest] = variables[rleList][rndIdx];
+                            }
+                            break;
+
+                        // IO
+                        case 'input':
+                            const inpVar = (data.var || "").trim();
+                            if(inpVar) {
+                                let input = prompt(`Inserisci valore per ${inpVar}:`);
+                                variables[inpVar] = (input !== null && !isNaN(input) && input.trim() !== "") ? Number(input) : (input || "");
+                            }
+                            break;
+                        case 'output':
+                            const msgStr = (data.msg || "").trim();
+                            log(variables.hasOwnProperty(msgStr) ? formatVar(variables[msgStr]) : msgStr);
+                            break;
+                        case 'wait':
+                            let sec = Math.max(0, parseFloat(data.sec) || 0);
+                            await new Promise(r => setTimeout(r, sec * 1000));
+                            break;
+
+                        // FLOW
+                        case 'if':
+                            if (evalInContext(data.cond || "false")) {
+                                await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children));
+                            }
+                            break;
+                        case 'while':
+                            let wSafety = 0;
+                            while (evalInContext(data.cond || "false")) {
+                                if (!isRunning || stopLoops) break;
+                                try { await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children)); }
+                                catch (e) { if (e.message === "BREAK") break; throw e; }
+                                if (++wSafety > 5000) throw new Error("Loop infinito (Security Break)");
+                                await new Promise(r => setTimeout(r, 0));
+                            }
+                            break;
+                        case 'repeat':
+                            const times = parseInt(data.times) || 0;
+                            for (let i = 0; i < times; i++) {
+                                if (!isRunning || stopLoops) break;
+                                try { await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children)); }
+                                catch (e) { if (e.message === "BREAK") break; throw e; }
+                                await new Promise(r => setTimeout(r, 0));
+                            }
+                            break;
+                        case 'break':
+                            throw new Error("BREAK");
+                    }
+                } catch (e) { 
+                    if (e.message === "BREAK") { blockEl.classList.remove('executing'); throw e; }
+                    log(`ERRORE: ${e.message}`, "text-red-400");
+                    isRunning = false; 
+                }
+
+                updateVarsUI();
+                blockEl.classList.remove('executing');
+                await new Promise(r => setTimeout(r, 50)); // Visual delay
+            }
+        }
+
+        function evalInContext(expr) {
+            const e = (expr || "").trim();
+            if (!e) return false;
+            try { return new Function(...Object.keys(variables), `return ${e}`)(...Object.values(variables)); }
+            catch { return e; }
+        }
+
+        function formatVar(v) {
+            if(Array.isArray(v)) return `[${v.join(', ')}]`;
+            return v;
+        }
+
+        function log(msg, classes = "text-emerald-300") {
+            const out = document.getElementById('console-output');
+            const div = document.createElement('div');
+            div.className = `${classes} font-mono text-xs border-l-2 border-slate-700 pl-2 py-0.5`;
+            div.innerText = `> ${msg}`;
+            out.appendChild(div);
+            out.scrollTop = out.scrollHeight;
+        }
+
+        function updateVarsUI() {
+            const list = document.getElementById('vars-list');
+            list.innerHTML = '';
+            Object.entries(variables).forEach(([k, v]) => {
+                const div = document.createElement('div');
+                div.className = "flex justify-between bg-slate-800 p-2 rounded text-[10px] border border-slate-700 mb-1";
+                div.innerHTML = `<span class="text-indigo-400 font-bold font-mono">${k}</span><span class="text-emerald-300 font-mono truncate max-w-[100px]" title="${formatVar(v)}">${formatVar(v)}</span>`;
+                list.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>

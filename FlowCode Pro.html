@@ -17,7 +17,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            background-color: #0f172a; /* Dark theme base */
+            background-color: #0f172a;
             color: #e2e8f0;
         }
 
@@ -45,8 +45,17 @@
             background: #1e293b;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
             overflow-y: auto;
+            position: relative;
         }
         
+        /* Classe per disabilitare l'editor durante l'esecuzione */
+        .editor-locked {
+            pointer-events: none;
+            opacity: 0.6;
+            filter: grayscale(0.5);
+            border-color: #fbbf24;
+        }
+
         .block-item {
             cursor: grab;
             transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
@@ -65,8 +74,10 @@
 
         .executing {
             outline: 2px solid #fbbf24 !important;
-            box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+            box-shadow: 0 0 25px rgba(251, 191, 36, 0.4);
             background-color: #334155 !important;
+            z-index: 100;
+            transform: scale(1.02);
         }
 
         .nested-area {
@@ -79,7 +90,6 @@
             border-radius: 0 0 0 4px;
         }
 
-        /* Input Styling */
         input, select {
             background-color: rgba(0,0,0,0.3);
             border: 1px solid #475569;
@@ -103,7 +113,6 @@
         }
         .animate-block { animation: slideIn 0.2s ease-out; }
 
-        /* Palette Categories */
         .category-header {
             font-size: 0.65rem;
             font-weight: 800;
@@ -129,7 +138,7 @@
             </div>
             <div>
                 <h1 class="font-bold text-lg tracking-tight text-slate-100">FlowCode <span class="text-indigo-400">Pro</span></h1>
-                <p class="text-[10px] text-slate-500 -mt-1 font-mono">v4.0 Ultimate</p>
+                <p class="text-[10px] text-slate-500 -mt-1 font-mono">v5.4 Error Handling</p>
             </div>
         </div>
         
@@ -146,6 +155,9 @@
 
             <button onclick="runProgram()" id="run-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-1.5 rounded text-xs font-bold shadow-lg shadow-emerald-900/50 flex items-center transition-all active:scale-95 border border-emerald-500">
                 <span class="mr-2">▶</span> ESEGUI
+            </button>
+            <button onclick="stopExecution()" id="stop-btn" class="hidden bg-red-600 hover:bg-red-500 text-white px-6 py-1.5 rounded text-xs font-bold shadow-lg shadow-red-900/50 flex items-center transition-all active:scale-95 border border-red-500">
+                <span class="mr-2">⛔</span> STOP
             </button>
         </div>
     </header>
@@ -198,6 +210,8 @@
             <div class="space-y-1.5">
                 <div draggable="true" ondragstart="onDragStart(event, 'rand_int')" class="p-2 bg-pink-900/40 border-l-4 border-pink-500 rounded text-xs hover:bg-pink-900/60 cursor-grab">Intero Casuale</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'rand_float')" class="p-2 bg-pink-900/40 border-l-4 border-pink-600 rounded text-xs hover:bg-pink-900/60 cursor-grab">Decimale Casuale</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'rand_string')" class="p-2 bg-pink-900/40 border-l-4 border-pink-300 rounded text-xs hover:bg-pink-900/60 cursor-grab">Stringa Casuale</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'rand_emoji')" class="p-2 bg-pink-900/40 border-l-4 border-pink-700 rounded text-xs hover:bg-pink-900/60 cursor-grab">Emoji Casuale</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'rand_bool')" class="p-2 bg-pink-900/40 border-l-4 border-pink-400 rounded text-xs hover:bg-pink-900/60 cursor-grab">Booleano Casuale</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'rand_color')" class="p-2 bg-rose-900/40 border-l-4 border-rose-500 rounded text-xs hover:bg-rose-900/60 cursor-grab">Colore HEX Casuale</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'rand_list_elem')" class="p-2 bg-rose-900/40 border-l-4 border-rose-400 rounded text-xs hover:bg-rose-900/60 cursor-grab">Elemento da Lista</div>
@@ -208,6 +222,11 @@
                 <div draggable="true" ondragstart="onDragStart(event, 'input')" class="p-2 bg-emerald-900/40 border-l-4 border-emerald-500 rounded text-xs hover:bg-emerald-900/60 cursor-grab">Leggi Utente (Input)</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'output')" class="p-2 bg-emerald-900/40 border-l-4 border-emerald-600 rounded text-xs hover:bg-emerald-900/60 cursor-grab">Scrivi Console (Print)</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'wait')" class="p-2 bg-amber-900/40 border-l-4 border-amber-500 rounded text-xs hover:bg-amber-900/60 cursor-grab">Aspetta (Sleep)</div>
+            </div>
+
+            <div class="category-header text-slate-400">Utility</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'comment')" class="p-2 bg-slate-800 border-l-4 border-slate-500 rounded text-xs hover:bg-slate-700 cursor-grab italic text-slate-400">Commento (//)</div>
             </div>
             
             <div class="h-20"></div> <!-- Spazio extra per scroll -->
@@ -280,20 +299,15 @@
                     inputs: {},
                     children: []
                 };
-                
-                // Get inputs safely (only direct children inputs)
                 el.querySelectorAll('input, select').forEach(input => {
                     if (input.closest('.block-item') === el && input.dataset.key) {
                         blockData.inputs[input.dataset.key] = input.value;
                     }
                 });
-                
-                // Get nested children
                 const nestedContainer = el.querySelector('.nested-area');
                 if(nestedContainer) {
                     blockData.children = serialize(nestedContainer);
                 }
-                
                 blocks.push(blockData);
             });
             return blocks;
@@ -302,62 +316,36 @@
         function loadProject(input) {
             const file = input.files[0];
             if(!file) return;
-            
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
                     const data = JSON.parse(e.target.result);
                     const root = document.getElementById('main-editor');
-                    
-                    if(!confirm("Caricare questo progetto sovrascriverà quello attuale. Continuare?")) {
-                        input.value = '';
-                        return;
-                    }
-
-                    // Clear editor
+                    if(!confirm("Sovrascrivere progetto corrente?")) { input.value = ''; return; }
                     root.innerHTML = '';
-                    
-                    // Rebuild
                     deserialize(data, root);
-                    
-                    // Check empty
-                    if(root.children.length === 0) {
-                         root.innerHTML = `<div id="placeholder-msg" class="flex flex-col items-center justify-center h-full text-slate-500 pointer-events-none select-none"><svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg><p class="font-medium text-lg">Area di Sviluppo</p><p class="text-xs mt-2 opacity-70">Trascina i componenti dalla barra laterale</p></div>`;
-                    }
-                    
+                    if(root.children.length === 0) root.innerHTML = `<div id="placeholder-msg" class="flex flex-col items-center justify-center h-full text-slate-500 pointer-events-none select-none"><svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg><p class="font-medium text-lg">Area di Sviluppo</p><p class="text-xs mt-2 opacity-70">Trascina i componenti dalla barra laterale</p></div>`;
                     log("--- PROGETTO CARICATO ---", "text-purple-400");
-                } catch(err) {
-                    alert("Errore nel file JSON: " + err.message);
-                }
+                } catch(err) { alert("Errore nel file JSON: " + err.message); }
             };
             reader.readAsText(file);
-            input.value = ''; // Reset input for re-use
+            input.value = '';
         }
 
         function deserialize(data, container) {
             data.forEach(blockData => {
                 const blockEl = createBlockUI(blockData.type);
-                
-                // Fill inputs
                 const inputs = blockEl.querySelectorAll('input, select');
                 inputs.forEach(input => {
-                    // Safety check: ensure input belongs to this block
                     if (input.closest('.block-item') === blockEl) {
                         const key = input.dataset.key;
-                        if(key && blockData.inputs[key] !== undefined) {
-                            input.value = blockData.inputs[key];
-                        }
+                        if(key && blockData.inputs[key] !== undefined) input.value = blockData.inputs[key];
                     }
                 });
-                
                 container.appendChild(blockEl);
-                
-                // Handle nested recursion
                 if(blockData.children && blockData.children.length > 0) {
                     const nestedContainer = blockEl.querySelector('.nested-area');
-                    if(nestedContainer) {
-                        deserialize(blockData.children, nestedContainer);
-                    }
+                    if(nestedContainer) deserialize(blockData.children, nestedContainer);
                 }
             });
         }
@@ -387,40 +375,19 @@
 
         // --- Drag & Drop ---
         function allowDrop(ev) { ev.preventDefault(); }
-        function onDragStart(ev, type) { 
-            ev.dataTransfer.setData("type", type); 
-            ev.dataTransfer.effectAllowed = 'copy';
-        }
-
-        function handleDragStartInternal(e) {
-            dragSrcEl = this;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('internal-id', this.id);
-            this.classList.add('dragging-now');
-        }
-
-        function handleDragEndInternal(e) {
-            this.classList.remove('dragging-now');
-        }
-
+        function onDragStart(ev, type) { ev.dataTransfer.setData("type", type); ev.dataTransfer.effectAllowed = 'copy'; }
+        function handleDragStartInternal(e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('internal-id', this.id); this.classList.add('dragging-now'); }
+        function handleDragEndInternal(e) { this.classList.remove('dragging-now'); }
         function onDrop(ev, targetId) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            
+            ev.preventDefault(); ev.stopPropagation();
             const type = ev.dataTransfer.getData("type");
             const internalId = ev.dataTransfer.getData("internal-id");
             const placeholder = document.getElementById('placeholder-msg');
             if (placeholder) placeholder.remove();
-
             const targetContainer = document.getElementById(targetId);
-
             if (internalId) {
                 const draggedEl = document.getElementById(internalId);
-                // FIX: Check if we are trying to drop a parent into its own children area
-                if (draggedEl.contains(targetContainer)) {
-                    log("ERRORE: Non puoi spostare un blocco dentro se stesso!", "text-red-400");
-                    return;
-                }
+                if (draggedEl.contains(targetContainer)) { log("ERRORE: Non puoi spostare un blocco dentro se stesso!", "text-red-400"); return; }
                 const afterElement = getDragAfterElement(targetContainer, ev.clientY);
                 if (afterElement == null) targetContainer.appendChild(draggedEl);
                 else targetContainer.insertBefore(draggedEl, afterElement);
@@ -431,12 +398,8 @@
                 else targetContainer.insertBefore(block, afterElement);
             }
         }
-
         function getDragAfterElement(container, y) {
-            const draggableElements = [...container.children].filter(child => 
-                child.classList.contains('block-item') && !child.classList.contains('dragging-now')
-            );
-
+            const draggableElements = [...container.children].filter(child => child.classList.contains('block-item') && !child.classList.contains('dragging-now'));
             return draggableElements.reduce((closest, child) => {
                 const box = child.getBoundingClientRect();
                 const offset = y - box.top - box.height / 2;
@@ -453,7 +416,6 @@
             div.dataset.type = type;
             div.draggable = true;
             div.className = "block-item animate-block p-3 rounded-md shadow-sm border-l-4 flex flex-col relative group";
-            
             div.addEventListener('dragstart', handleDragStartInternal, false);
             div.addEventListener('dragend', handleDragEndInternal, false);
 
@@ -461,126 +423,36 @@
             let content = `<div class="flex flex-wrap items-center gap-2">`;
 
             switch(type) {
-                case 'decl':
-                    color = "border-sky-500";
-                    content += `<span class="font-bold text-sky-400 text-xs">VAR</span><input class="w-20 font-bold" placeholder="nome" data-key="name"><span class="text-xs text-slate-400">tipo</span><select data-key="vtype"><option value="string">String</option><option value="int">Int</option><option value="float">Float</option><option value="bool">Bool</option></select>`;
-                    break;
-                case 'assign':
-                    color = "border-blue-500";
-                    content += `<input class="w-20 font-bold text-blue-300" placeholder="Variabile" data-key="var"><span class="font-bold text-slate-400">=</span><input class="w-32" placeholder="Valore/Espressione" data-key="val">`;
-                    break;
-                case 'inc':
-                    color = "border-indigo-500";
-                    content += `<span class="font-bold text-indigo-400 text-xs">INC</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-indigo-300">++</span>`;
-                    break;
-                
-                // MATH
-                case 'calc':
-                    color = "border-orange-500";
-                    content += `<span class="font-bold text-orange-500 text-xs">CALC</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-16" placeholder="A" data-key="a"><select data-key="op" class="font-bold text-orange-400"><option value="+">+</option><option value="-">-</option><option value="*">×</option><option value="/">÷</option><option value="%">MOD</option><option value="^">POW</option></select><input class="w-16" placeholder="B" data-key="b">`;
-                    break;
-                case 'math_pro':
-                    color = "border-orange-600";
-                    content += `<span class="font-bold text-orange-600 text-xs">MATH</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="sqrt">Radice Quadra</option><option value="sin">Seno</option><option value="cos">Coseno</option><option value="tan">Tangente</option><option value="abs">Assoluto</option><option value="round">Arrotonda</option><option value="floor">Difetto (Floor)</option><option value="ceil">Eccesso (Ceil)</option></select><span class="text-xs">(</span><input class="w-16" placeholder="Val" data-key="val"><span class="text-xs">)</span>`;
-                    break;
-
-                // STRINGS
-                case 'str_join':
-                    color = "border-teal-500";
-                    content += `<span class="font-bold text-teal-500 text-xs">CONCAT</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo A" data-key="a"><span class="text-xs">+</span><input class="w-20" placeholder="Testo B" data-key="b">`;
-                    break;
-                case 'str_info':
-                    color = "border-teal-600";
-                    content += `<span class="font-bold text-teal-600 text-xs">STR INFO</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="upper">MAIUSCOLO</option><option value="lower">minuscolo</option></select><span class="text-xs">di</span><input class="w-20" placeholder="Testo" data-key="src">`;
-                    break;
-                case 'str_sub':
-                    color = "border-teal-400";
-                    content += `<span class="font-bold text-teal-400 text-xs">SUBSTR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">da</span><input type="number" class="w-10" value="0" data-key="start"><span class="text-[9px]">a</span><input type="number" class="w-10" value="5" data-key="end">`;
-                    break;
-                 case 'str_split':
-                    color = "border-teal-300";
-                    content += `<span class="font-bold text-teal-300 text-xs">SPLIT</span><input class="w-20 font-bold" placeholder="Lista Dest" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">su</span><input class="w-10" value="," data-key="delim">`;
-                    break;
-                 case 'str_replace':
-                    color = "border-teal-700";
-                    content += `<span class="font-bold text-teal-700 text-xs">REPLACE</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">:</span><input class="w-16" placeholder="Old" data-key="old"><span class="text-xs">→</span><input class="w-16" placeholder="New" data-key="new">`;
-                    break;
-
-                // LISTS
-                case 'list_new':
-                    color = "border-cyan-500";
-                    content += `<span class="font-bold text-cyan-500 text-xs">LISTA</span><input class="w-24 font-bold" placeholder="Nome Lista" data-key="var"><span class="text-xs text-cyan-400">= [] (Vuota)</span>`;
-                    break;
-                case 'list_add':
-                    color = "border-cyan-600";
-                    content += `<span class="font-bold text-cyan-600 text-xs">PUSH</span><input class="w-24" placeholder="Valore" data-key="val"><span class="text-xs">in</span><input class="w-24 font-bold" placeholder="Lista" data-key="list">`;
-                    break;
-                case 'list_get':
-                    color = "border-cyan-400";
-                    content += `<span class="font-bold text-cyan-400 text-xs">GET</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">]</span>`;
-                    break;
-                case 'list_set':
-                    color = "border-cyan-700";
-                    content += `<span class="font-bold text-cyan-700 text-xs">SET</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">] =</span><input class="w-20" placeholder="Val" data-key="val">`;
-                    break;
-                case 'list_op':
-                    color = "border-cyan-300";
-                    content += `<span class="font-bold text-cyan-300 text-xs">ARRAY OP</span><input class="w-20 font-bold" placeholder="Lista/Var" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="sort">Ordina (A-Z)</option><option value="reverse">Inverti</option><option value="shuffle">Mescola</option><option value="clear">Svuota</option></select><span class="text-xs">su</span><input class="w-20" placeholder="Lista" data-key="list">`;
-                    break;
-
-                // CONTROL
-                case 'if':
-                    color = "border-indigo-500";
-                    content += `<span class="font-bold text-indigo-400 text-xs">SE</span><input class="w-40 font-bold text-indigo-200" placeholder="condizione (es: x > 5)" data-key="cond"><span class="text-xs text-indigo-400">ALLORA:</span>`;
-                    break;
-                case 'while':
-                    color = "border-purple-500";
-                    content += `<span class="font-bold text-purple-400 text-xs">MENTRE</span><input class="w-40 font-bold text-purple-200" placeholder="condizione" data-key="cond"><span class="text-xs text-purple-400">FAI:</span>`;
-                    break;
-                case 'repeat':
-                    color = "border-fuchsia-500";
-                    content += `<span class="font-bold text-fuchsia-400 text-xs">RIPETI</span><input type="number" class="w-16" value="5" data-key="times"><span class="text-xs text-fuchsia-400">VOLTE:</span>`;
-                    break;
-                case 'break':
-                    color = "border-red-500";
-                    content += `<span class="font-bold text-red-500 text-xs">⛔ INTERROMPI CICLO</span>`;
-                    break;
-
-                // RANDOM
-                case 'rand_int':
-                    color = "border-pink-500";
-                    content += `<span class="font-bold text-pink-500 text-xs">RND INT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="100" data-key="max">`;
-                    break;
-                case 'rand_float':
-                    color = "border-pink-600";
-                    content += `<span class="font-bold text-pink-600 text-xs">RND FLOAT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0.0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="1.0" data-key="max">`;
-                    break;
-                case 'rand_bool':
-                    color = "border-pink-400";
-                    content += `<span class="font-bold text-pink-400 text-xs">RND BOOL</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`;
-                    break;
-                case 'rand_color':
-                    color = "border-rose-500";
-                    content += `<span class="font-bold text-rose-500 text-xs">RND HEX</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-rose-300">Genera #Colore</span>`;
-                    break;
-                case 'rand_list_elem':
-                    color = "border-rose-400";
-                    content += `<span class="font-bold text-rose-400 text-xs">PESCA</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">da</span><input class="w-20 font-bold" placeholder="Lista" data-key="list">`;
-                    break;
-
-                // IO
-                case 'input':
-                    color = "border-emerald-500";
-                    content += `<span class="font-bold text-emerald-500 text-xs">INPUT</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var">`;
-                    break;
-                case 'output':
-                    color = "border-emerald-600";
-                    content += `<span class="font-bold text-emerald-600 text-xs">PRINT</span><input class="w-48" placeholder="Messaggio o Variabile" data-key="msg">`;
-                    break;
-                case 'wait':
-                    color = "border-amber-500";
-                    content += `<span class="font-bold text-amber-500 text-xs">SLEEP</span><input type="number" step="0.1" class="w-16" value="1.0" data-key="sec"><span class="text-xs">s</span>`;
-                    break;
+                case 'decl': color = "border-sky-500"; content += `<span class="font-bold text-sky-400 text-xs">VAR</span><input class="w-20 font-bold" placeholder="nome" data-key="name"><span class="text-xs text-slate-400">tipo</span><select data-key="vtype"><option value="string">String</option><option value="int">Int</option><option value="float">Float</option><option value="bool">Bool</option></select>`; break;
+                case 'assign': color = "border-blue-500"; content += `<input class="w-20 font-bold text-blue-300" placeholder="Variabile" data-key="var"><span class="font-bold text-slate-400">=</span><input class="w-32" placeholder="Valore/Espressione" data-key="val">`; break;
+                case 'inc': color = "border-indigo-500"; content += `<span class="font-bold text-indigo-400 text-xs">INC</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-indigo-300">++</span>`; break;
+                case 'calc': color = "border-orange-500"; content += `<span class="font-bold text-orange-500 text-xs">CALC</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-16" placeholder="A" data-key="a"><select data-key="op" class="font-bold text-orange-400"><option value="+">+</option><option value="-">-</option><option value="*">×</option><option value="/">÷</option><option value="%">MOD</option><option value="^">POW</option></select><input class="w-16" placeholder="B" data-key="b">`; break;
+                case 'math_pro': color = "border-orange-600"; content += `<span class="font-bold text-orange-600 text-xs">MATH</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="sqrt">Radice Quadra</option><option value="sin">Seno</option><option value="cos">Coseno</option><option value="tan">Tangente</option><option value="abs">Assoluto</option><option value="round">Arrotonda</option><option value="floor">Difetto (Floor)</option><option value="ceil">Eccesso (Ceil)</option></select><span class="text-xs">(</span><input class="w-16" placeholder="Val" data-key="val"><span class="text-xs">)</span>`; break;
+                case 'str_join': color = "border-teal-500"; content += `<span class="font-bold text-teal-500 text-xs">CONCAT</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo A" data-key="a"><span class="text-xs">+</span><input class="w-20" placeholder="Testo B" data-key="b">`; break;
+                case 'str_info': color = "border-teal-600"; content += `<span class="font-bold text-teal-600 text-xs">STR INFO</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="upper">MAIUSCOLO</option><option value="lower">minuscolo</option></select><span class="text-xs">di</span><input class="w-20" placeholder="Testo" data-key="src">`; break;
+                case 'str_sub': color = "border-teal-400"; content += `<span class="font-bold text-teal-400 text-xs">SUBSTR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">da</span><input type="number" class="w-10" value="0" data-key="start"><span class="text-[9px]">a</span><input type="number" class="w-10" value="5" data-key="end">`; break;
+                case 'str_split': color = "border-teal-300"; content += `<span class="font-bold text-teal-300 text-xs">SPLIT</span><input class="w-20 font-bold" placeholder="Lista Dest" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">su</span><input class="w-10" value="," data-key="delim">`; break;
+                case 'str_replace': color = "border-teal-700"; content += `<span class="font-bold text-teal-700 text-xs">REPLACE</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">:</span><input class="w-16" placeholder="Old" data-key="old"><span class="text-xs">→</span><input class="w-16" placeholder="New" data-key="new">`; break;
+                case 'list_new': color = "border-cyan-500"; content += `<span class="font-bold text-cyan-500 text-xs">LISTA</span><input class="w-24 font-bold" placeholder="Nome Lista" data-key="var"><span class="text-xs text-cyan-400">= [] (Vuota)</span>`; break;
+                case 'list_add': color = "border-cyan-600"; content += `<span class="font-bold text-cyan-600 text-xs">PUSH</span><input class="w-24" placeholder="Valore" data-key="val"><span class="text-xs">in</span><input class="w-24 font-bold" placeholder="Lista" data-key="list">`; break;
+                case 'list_get': color = "border-cyan-400"; content += `<span class="font-bold text-cyan-400 text-xs">GET</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">]</span>`; break;
+                case 'list_set': color = "border-cyan-700"; content += `<span class="font-bold text-cyan-700 text-xs">SET</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">] =</span><input class="w-20" placeholder="Val" data-key="val">`; break;
+                case 'list_op': color = "border-cyan-300"; content += `<span class="font-bold text-cyan-300 text-xs">ARRAY OP</span><input class="w-20 font-bold" placeholder="Lista/Var" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="sort">Ordina (A-Z)</option><option value="reverse">Inverti</option><option value="shuffle">Mescola</option><option value="clear">Svuota</option></select><span class="text-xs">su</span><input class="w-20" placeholder="Lista" data-key="list">`; break;
+                case 'if': color = "border-indigo-500"; content += `<span class="font-bold text-indigo-400 text-xs">SE</span><input class="w-40 font-bold text-indigo-200" placeholder="cond es: x == 'si'" data-key="cond"><span class="text-xs text-indigo-400">ALLORA:</span>`; break;
+                case 'while': color = "border-purple-500"; content += `<span class="font-bold text-purple-400 text-xs">MENTRE</span><input class="w-40 font-bold text-purple-200" placeholder="condizione" data-key="cond"><span class="text-xs text-purple-400">FAI:</span>`; break;
+                case 'repeat': color = "border-fuchsia-500"; content += `<span class="font-bold text-fuchsia-400 text-xs">RIPETI</span><input type="number" class="w-16" value="5" data-key="times"><span class="text-xs text-fuchsia-400">VOLTE:</span>`; break;
+                case 'break': color = "border-red-500"; content += `<span class="font-bold text-red-500 text-xs">⛔ INTERROMPI CICLO</span>`; break;
+                case 'rand_int': color = "border-pink-500"; content += `<span class="font-bold text-pink-500 text-xs">RND INT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="100" data-key="max">`; break;
+                case 'rand_float': color = "border-pink-600"; content += `<span class="font-bold text-pink-600 text-xs">RND FLOAT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0.0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="1.0" data-key="max">`; break;
+                case 'rand_bool': color = "border-pink-400"; content += `<span class="font-bold text-pink-400 text-xs">RND BOOL</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`; break;
+                case 'rand_color': color = "border-rose-500"; content += `<span class="font-bold text-rose-500 text-xs">RND HEX</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-rose-300">Genera #Colore</span>`; break;
+                case 'rand_list_elem': color = "border-rose-400"; content += `<span class="font-bold text-rose-400 text-xs">PESCA</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">da</span><input class="w-20 font-bold" placeholder="Lista" data-key="list">`; break;
+                case 'rand_string': color = "border-pink-300"; content += `<span class="font-bold text-pink-300 text-xs">RND STR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">Len:</span><input type="number" class="w-12" value="8" data-key="len">`; break;
+                case 'rand_emoji': color = "border-pink-700"; content += `<span class="font-bold text-pink-700 text-xs">RND EMOJI</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`; break;
+                case 'input': color = "border-emerald-500"; content += `<span class="font-bold text-emerald-500 text-xs">INPUT</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var">`; break;
+                case 'output': color = "border-emerald-600"; content += `<span class="font-bold text-emerald-600 text-xs">PRINT</span><input class="w-48" placeholder="Messaggio o Variabile" data-key="msg">`; break;
+                case 'wait': color = "border-amber-500"; content += `<span class="font-bold text-amber-500 text-xs">SLEEP</span><input type="number" step="0.1" class="w-16" value="1.0" data-key="sec"><span class="text-xs">s</span>`; break;
+                case 'comment': color = "border-slate-600"; content += `<span class="font-bold text-slate-400 text-xs italic">//</span><input class="w-64 italic text-slate-400 bg-transparent border-none" placeholder="Scrivi un commento..." data-key="text">`; break;
             }
 
             content += `<button onclick="removeBlock('${id}')" class="ml-auto text-slate-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>`;
@@ -602,8 +474,11 @@
             if (isRunning) return;
             isRunning = true;
             stopLoops = false;
-            const btn = document.getElementById('run-btn');
-            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            
+            // UI Toggle
+            document.getElementById('run-btn').classList.add('hidden');
+            document.getElementById('stop-btn').classList.remove('hidden');
+            document.getElementById('main-editor').classList.add('editor-locked'); // Lock editor
             
             clearConsole();
             variables = {};
@@ -613,18 +488,31 @@
             const rootBlocks = Array.from(document.getElementById('main-editor').children).filter(el => el.id !== 'placeholder-msg');
             try {
                 await executeBlockList(rootBlocks);
+                log("--- PROGRAMMA TERMINATO ---", "text-slate-400");
             } catch (err) {
                 if (err.message !== "STOP") log(`ERRORE RUNTIME: ${err.message}`, "text-red-400 font-bold");
+                else log("--- ARRESTO FORZATO ---", "text-red-500 font-bold");
             }
 
-            log("--- PROGRAMMA TERMINATO ---", "text-slate-400");
+            // Restore UI
             isRunning = false;
-            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('run-btn').classList.remove('hidden');
+            document.getElementById('stop-btn').classList.add('hidden');
+            document.getElementById('main-editor').classList.remove('editor-locked');
+            document.querySelectorAll('.executing').forEach(el => el.classList.remove('executing'));
+        }
+
+        function stopExecution() {
+            if(isRunning) {
+                stopLoops = true;
+            }
         }
 
         async function executeBlockList(blockList) {
             for (let blockEl of blockList) {
-                if (!isRunning || stopLoops) break;
+                if (!isRunning || stopLoops) {
+                    throw new Error("STOP");
+                }
                 
                 blockEl.classList.add('executing');
                 blockEl.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
@@ -637,13 +525,19 @@
 
                 try {
                     switch(type) {
+                        case 'comment': break; // Ignora
                         case 'decl':
                             const dName = (data.name || "anon").trim();
-                            variables[dName] = { int:0, float:0.0, string:"", bool:false }[data.vtype] || 0;
+                            // Inizializza con stringa vuota per evitare 0 su stringhe
+                            variables[dName] = { int:0, float:0.0, string:"", bool:false }[data.vtype];
+                            if(variables[dName] === undefined) variables[dName] = 0; // Fallback
                             break;
                         case 'assign':
                             const aVar = (data.var || "").trim();
-                            if(aVar) variables[aVar] = evalInContext(data.val || "0");
+                            const aValStr = (data.val || "").trim();
+                            if (!aVar) throw new Error("Manca variabile in Assegnazione");
+                            if (aValStr === "") throw new Error("Manca valore in Assegnazione (Usa \"\" per testo vuoto)");
+                            variables[aVar] = evalInContext(aValStr);
                             break;
                         case 'inc':
                             const iVar = (data.var || "").trim();
@@ -778,6 +672,23 @@
                                 variables[rleDest] = variables[rleList][rndIdx];
                             }
                             break;
+                        case 'rand_string':
+                            const rStrVar = (data.var || "").trim();
+                            const rStrLen = parseInt(data.len) || 8;
+                            if (rStrVar) {
+                                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                                let result = '';
+                                for (let i = 0; i < rStrLen; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+                                variables[rStrVar] = result;
+                            }
+                            break;
+                        case 'rand_emoji':
+                            const rEmoVar = (data.var || "").trim();
+                            if (rEmoVar) {
+                                const emojis = ['😀','😂','😍','😎','🤔','👍','👎','🔥','✨','🚀','💻','🍕','🚗','🐶','🐱','🌟','🎉'];
+                                variables[rEmoVar] = emojis[Math.floor(Math.random() * emojis.length)];
+                            }
+                            break;
 
                         // IO
                         case 'input':
@@ -788,8 +699,31 @@
                             }
                             break;
                         case 'output':
-                            const msgStr = (data.msg || "").trim();
-                            log(variables.hasOwnProperty(msgStr) ? formatVar(variables[msgStr]) : msgStr);
+                            const msgExpr = (data.msg || "").trim();
+                            let result;
+                            try {
+                                // Supporta virgola come separatore (stile Python/JS console)
+                                // Avvolgiamo in array per gestire sequenze
+                                const safeExpr = msgExpr.startsWith('[') ? msgExpr : `[${msgExpr}]`;
+                                const evalRes = new Function(...Object.keys(variables), `return ${safeExpr}`)(...Object.values(variables));
+                                
+                                if (Array.isArray(evalRes)) {
+                                    // Mappa ogni elemento usando formatVar (per gestire liste interne) poi unisci
+                                    result = evalRes.map(item => formatVar(item)).join(' '); 
+                                } else {
+                                    result = formatVar(evalRes);
+                                }
+                            } catch (e) {
+                                // Analisi errore migliorata
+                                let tip = "";
+                                if (e.message.includes("Unexpected identifier") || e.message.includes("missing )")) {
+                                    tip = " (Hai dimenticato un '+' o una ',' tra testo e variabile?)";
+                                } else if (e.message.includes("is not defined")) {
+                                    tip = " (Hai dimenticato le virgolette \" \" per il testo?)";
+                                }
+                                throw new Error(`Errore Output: ${e.message}${tip}`);
+                            }
+                            log(result);
                             break;
                         case 'wait':
                             let sec = Math.max(0, parseFloat(data.sec) || 0);
@@ -805,7 +739,7 @@
                         case 'while':
                             let wSafety = 0;
                             while (evalInContext(data.cond || "false")) {
-                                if (!isRunning || stopLoops) break;
+                                if (!isRunning || stopLoops) throw new Error("STOP");
                                 try { await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children)); }
                                 catch (e) { if (e.message === "BREAK") break; throw e; }
                                 if (++wSafety > 5000) throw new Error("Loop infinito (Security Break)");
@@ -815,7 +749,7 @@
                         case 'repeat':
                             const times = parseInt(data.times) || 0;
                             for (let i = 0; i < times; i++) {
-                                if (!isRunning || stopLoops) break;
+                                if (!isRunning || stopLoops) throw new Error("STOP");
                                 try { await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children)); }
                                 catch (e) { if (e.message === "BREAK") break; throw e; }
                                 await new Promise(r => setTimeout(r, 0));
@@ -826,6 +760,7 @@
                     }
                 } catch (e) { 
                     if (e.message === "BREAK") { blockEl.classList.remove('executing'); throw e; }
+                    if (e.message === "STOP") throw e;
                     log(`ERRORE: ${e.message}`, "text-red-400");
                     isRunning = false; 
                 }
@@ -863,7 +798,7 @@
             Object.entries(variables).forEach(([k, v]) => {
                 const div = document.createElement('div');
                 div.className = "flex justify-between bg-slate-800 p-2 rounded text-[10px] border border-slate-700 mb-1";
-                div.innerHTML = `<span class="text-indigo-400 font-bold font-mono">${k}</span><span class="text-emerald-300 font-mono truncate max-w-[100px]" title="${formatVar(v)}">${formatVar(v)}</span>`;
+                div.innerHTML = `<span class="text-indigo-400 font-bold font-mono min-w-[50px] mr-2">${k}</span><span class="text-emerald-300 font-mono truncate flex-1 text-right" title="${formatVar(v)}">${formatVar(v)}</span>`;
                 list.appendChild(div);
             });
         }

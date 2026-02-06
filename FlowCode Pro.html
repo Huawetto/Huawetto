@@ -129,11 +129,21 @@
             </div>
             <div>
                 <h1 class="font-bold text-lg tracking-tight text-slate-100">FlowCode <span class="text-indigo-400">Pro</span></h1>
-                <p class="text-[10px] text-slate-500 -mt-1 font-mono">v3.5 Ultimate</p>
+                <p class="text-[10px] text-slate-500 -mt-1 font-mono">v4.0 Ultimate</p>
             </div>
         </div>
         
         <div class="flex items-center space-x-3">
+            <button onclick="saveProject()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md flex items-center transition-all">
+                <span class="mr-2">💾</span> SALVA
+            </button>
+            <button onclick="document.getElementById('file-input').click()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md flex items-center transition-all">
+                <span class="mr-2">📂</span> CARICA
+            </button>
+            <input type="file" id="file-input" class="hidden" accept=".json" onchange="loadProject(this)">
+            
+            <div class="h-6 w-px bg-slate-700 mx-2"></div>
+
             <button onclick="runProgram()" id="run-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-1.5 rounded text-xs font-bold shadow-lg shadow-emerald-900/50 flex items-center transition-all active:scale-95 border border-emerald-500">
                 <span class="mr-2">▶</span> ESEGUI
             </button>
@@ -244,6 +254,113 @@
         let isRunning = false;
         let stopLoops = false;
         let dragSrcEl = null;
+
+        // --- Save / Load Logic ---
+        function saveProject() {
+            const root = document.getElementById('main-editor');
+            const data = serialize(root);
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "flowcode_project.json";
+            a.click();
+            URL.revokeObjectURL(url);
+            log("--- PROGETTO SALVATO ---", "text-blue-400");
+        }
+
+        function serialize(container) {
+            const blocks = [];
+            const children = Array.from(container.children).filter(el => el.classList.contains('block-item'));
+            
+            children.forEach(el => {
+                const blockData = {
+                    type: el.dataset.type,
+                    inputs: {},
+                    children: []
+                };
+                
+                // Get inputs safely (only direct children inputs)
+                el.querySelectorAll('input, select').forEach(input => {
+                    if (input.closest('.block-item') === el && input.dataset.key) {
+                        blockData.inputs[input.dataset.key] = input.value;
+                    }
+                });
+                
+                // Get nested children
+                const nestedContainer = el.querySelector('.nested-area');
+                if(nestedContainer) {
+                    blockData.children = serialize(nestedContainer);
+                }
+                
+                blocks.push(blockData);
+            });
+            return blocks;
+        }
+
+        function loadProject(input) {
+            const file = input.files[0];
+            if(!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    const root = document.getElementById('main-editor');
+                    
+                    if(!confirm("Caricare questo progetto sovrascriverà quello attuale. Continuare?")) {
+                        input.value = '';
+                        return;
+                    }
+
+                    // Clear editor
+                    root.innerHTML = '';
+                    
+                    // Rebuild
+                    deserialize(data, root);
+                    
+                    // Check empty
+                    if(root.children.length === 0) {
+                         root.innerHTML = `<div id="placeholder-msg" class="flex flex-col items-center justify-center h-full text-slate-500 pointer-events-none select-none"><svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg><p class="font-medium text-lg">Area di Sviluppo</p><p class="text-xs mt-2 opacity-70">Trascina i componenti dalla barra laterale</p></div>`;
+                    }
+                    
+                    log("--- PROGETTO CARICATO ---", "text-purple-400");
+                } catch(err) {
+                    alert("Errore nel file JSON: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+            input.value = ''; // Reset input for re-use
+        }
+
+        function deserialize(data, container) {
+            data.forEach(blockData => {
+                const blockEl = createBlockUI(blockData.type);
+                
+                // Fill inputs
+                const inputs = blockEl.querySelectorAll('input, select');
+                inputs.forEach(input => {
+                    // Safety check: ensure input belongs to this block
+                    if (input.closest('.block-item') === blockEl) {
+                        const key = input.dataset.key;
+                        if(key && blockData.inputs[key] !== undefined) {
+                            input.value = blockData.inputs[key];
+                        }
+                    }
+                });
+                
+                container.appendChild(blockEl);
+                
+                // Handle nested recursion
+                if(blockData.children && blockData.children.length > 0) {
+                    const nestedContainer = blockEl.querySelector('.nested-area');
+                    if(nestedContainer) {
+                        deserialize(blockData.children, nestedContainer);
+                    }
+                }
+            });
+        }
 
         // --- Resize Logic ---
         const grid = document.getElementById('resizable-grid');

@@ -23,19 +23,12 @@
 
         .app-container {
             display: grid;
-            grid-template-columns: 280px 4px 1fr 4px 300px;
+            grid-template-columns: 280px 1fr 300px; /* Removed resizer columns */
             flex: 1;
             overflow: hidden;
         }
 
-        .resizer {
-            background-color: #1e293b;
-            cursor: col-resize;
-            transition: background-color 0.2s;
-            border-left: 1px solid #334155;
-            border-right: 1px solid #334155;
-        }
-        .resizer:hover, .resizer.dragging { background-color: #6366f1; }
+        /* Resizer styles removed */
 
         .block-container {
             min-height: 150px;
@@ -67,10 +60,28 @@
             padding: 8px;
             border-radius: 4px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            margin-top: 10px; /* Spazio per l'indice */
         }
         
         .block-item:active { cursor: grabbing; transform: scale(1.01); z-index: 50; }
         .block-item.dragging-now { opacity: 0.6; border: 2px dashed #6366f1 !important; }
+
+        /* Badge Indice */
+        .block-index {
+            position: absolute;
+            top: -8px;
+            left: -4px;
+            background-color: #f59e0b;
+            color: #0f172a;
+            font-size: 9px;
+            font-weight: 900;
+            padding: 1px 5px;
+            border-radius: 10px;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            font-family: monospace;
+            pointer-events: none;
+        }
 
         .executing {
             outline: 2px solid #fbbf24 !important;
@@ -94,11 +105,12 @@
             background-color: rgba(0,0,0,0.3);
             border: 1px solid #475569;
             color: white;
-            padding: 2px 4px;
+            padding: 4px 6px;
             border-radius: 3px;
             font-family: monospace;
             font-size: 0.75rem;
-            transition: border 0.2s;
+            transition: border 0.2s, background-color 0.2s;
+            min-width: 0; 
         }
         input:focus, select:focus {
             outline: none;
@@ -138,7 +150,7 @@
             </div>
             <div>
                 <h1 class="font-bold text-lg tracking-tight text-slate-100">FlowCode <span class="text-indigo-400">Pro</span></h1>
-                <p class="text-[10px] text-slate-500 -mt-1 font-mono">v5.4 Error Handling</p>
+                <p class="text-[10px] text-slate-500 -mt-1 font-mono">v8.3 Static Layout</p>
             </div>
         </div>
         
@@ -165,13 +177,27 @@
     <div class="app-container" id="resizable-grid">
         
         <!-- Sidebar: Palette -->
-        <aside class="bg-slate-900 p-4 overflow-y-auto select-none">
+        <aside class="bg-slate-900 p-4 overflow-y-auto select-none border-r border-slate-700">
             
             <div class="category-header mt-0 text-sky-400">Variabili & Memoria</div>
             <div class="space-y-1.5">
                 <div draggable="true" ondragstart="onDragStart(event, 'decl')" class="p-2 bg-sky-900/40 border-l-4 border-sky-500 rounded text-xs hover:bg-sky-900/60 cursor-grab flex justify-between"><span>Dichiarazione</span> <span class="text-sky-500 text-[10px] font-mono">var</span></div>
                 <div draggable="true" ondragstart="onDragStart(event, 'assign')" class="p-2 bg-blue-900/40 border-l-4 border-blue-500 rounded text-xs hover:bg-blue-900/60 cursor-grab flex justify-between"><span>Assegnazione</span> <span class="text-blue-500 text-[10px] font-mono">=</span></div>
                 <div draggable="true" ondragstart="onDragStart(event, 'inc')" class="p-2 bg-indigo-900/40 border-l-4 border-indigo-500 rounded text-xs hover:bg-indigo-900/60 cursor-grab flex justify-between"><span>Incrementa</span> <span class="text-indigo-500 text-[10px] font-mono">++</span></div>
+            </div>
+            
+            <!-- NUOVA CATEGORIA GOTO -->
+            <div class="category-header text-yellow-400">Controllo Flusso (GOTO)</div>
+            <div class="space-y-1.5">
+                <div draggable="true" ondragstart="onDragStart(event, 'jump_to')" class="p-2 bg-yellow-900/40 border-l-4 border-yellow-500 rounded text-xs hover:bg-yellow-900/60 cursor-grab font-bold flex justify-between">
+                    <span>VAI A LINEA</span> <span class="text-yellow-500 text-[10px] font-mono">GOTO</span>
+                </div>
+                <div draggable="true" ondragstart="onDragStart(event, 'restart')" class="p-2 bg-yellow-900/40 border-l-4 border-yellow-300 rounded text-xs hover:bg-yellow-900/60 cursor-grab font-bold flex justify-between">
+                    <span>RIAVVIA (Inizio)</span> <span class="text-yellow-300 text-[10px] font-mono">RESET</span>
+                </div>
+                <div draggable="true" ondragstart="onDragStart(event, 'terminate')" class="p-2 bg-red-900/40 border-l-4 border-red-600 rounded text-xs hover:bg-red-900/60 cursor-grab font-bold flex justify-between">
+                    <span>TERMINA</span> <span class="text-red-400 text-[10px] font-mono">STOP</span>
+                </div>
             </div>
 
             <div class="category-header text-orange-400">Matematica Avanzata</div>
@@ -200,10 +226,12 @@
 
             <div class="category-header text-purple-400">Logica di Controllo</div>
             <div class="space-y-1.5">
-                <div draggable="true" ondragstart="onDragStart(event, 'if')" class="p-2 bg-indigo-900/40 border-l-4 border-indigo-500 rounded text-xs hover:bg-indigo-900/60 cursor-grab font-bold">SE (If Condition)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'if_else')" class="p-2 bg-indigo-900/40 border-l-4 border-indigo-500 rounded text-xs hover:bg-indigo-900/60 cursor-grab font-bold">SE / ALTRIMENTI (If-Else)</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'while')" class="p-2 bg-purple-900/40 border-l-4 border-purple-500 rounded text-xs hover:bg-purple-900/60 cursor-grab font-bold">MENTRE (While Loop)</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'repeat')" class="p-2 bg-fuchsia-900/40 border-l-4 border-fuchsia-500 rounded text-xs hover:bg-fuchsia-900/60 cursor-grab font-bold">RIPETI (For Loop)</div>
                 <div draggable="true" ondragstart="onDragStart(event, 'break')" class="p-2 bg-red-900/40 border-l-4 border-red-500 rounded text-xs hover:bg-red-900/60 cursor-grab text-red-300">INTERROMPI (Break)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'ret_void')" class="p-2 bg-red-900/40 border-l-4 border-red-700 rounded text-xs hover:bg-red-900/60 cursor-grab font-bold text-red-300">RITORNA (Void)</div>
+                <div draggable="true" ondragstart="onDragStart(event, 'ret_val')" class="p-2 bg-red-900/40 border-l-4 border-red-400 rounded text-xs hover:bg-red-900/60 cursor-grab font-bold text-red-300">RITORNA VALORE</div>
             </div>
 
             <div class="category-header text-pink-400">Randomizzazione Pro</div>
@@ -232,8 +260,6 @@
             <div class="h-20"></div> <!-- Spazio extra per scroll -->
         </aside>
 
-        <div class="resizer" id="resizer-left"></div>
-
         <!-- Editor Centrale -->
         <main class="bg-slate-800 overflow-y-auto p-6 md:p-8 flex flex-col min-w-[300px]">
             <div id="main-editor" class="block-container flex-1 shadow-inner overflow-x-hidden" ondrop="onDrop(event, 'main-editor')" ondragover="allowDrop(event)">
@@ -246,8 +272,6 @@
                 </div>
             </div>
         </main>
-
-        <div class="resizer" id="resizer-right"></div>
 
         <!-- Sidebar Destra -->
         <aside class="bg-slate-900 flex flex-col shadow-2xl overflow-hidden min-w-[200px] border-l border-slate-700">
@@ -273,105 +297,177 @@
         let isRunning = false;
         let stopLoops = false;
         let dragSrcEl = null;
+        let observer = null;
+
+        // --- Aggiornamento Indici Visivi ---
+        function updateBlockIndices() {
+            // FIX CRITICO: Disconnettiamo temporaneamente l'observer per evitare che le modifiche 
+            // fatte QUI (aggiunta span numeri) attivino di nuovo questa funzione all'infinito.
+            if(observer) observer.disconnect();
+
+            const allBlocks = document.querySelectorAll('#main-editor .block-item');
+            allBlocks.forEach((block, index) => {
+                let idxSpan = block.querySelector('.block-index');
+                if (!idxSpan) {
+                    idxSpan = document.createElement('span');
+                    idxSpan.className = 'block-index';
+                    block.appendChild(idxSpan);
+                }
+                const idx = index + 1;
+                // Ottimizzazione: modifichiamo il DOM solo se il numero è cambiato davvero
+                if (idxSpan.innerText !== '#' + idx) {
+                    idxSpan.innerText = '#' + idx;
+                }
+                if (block.dataset.execIndex != idx) {
+                    block.dataset.execIndex = idx;
+                }
+            });
+
+            // Riconnettiamo l'observer per le future modifiche dell'utente
+            if(observer) observer.observe(document.getElementById('main-editor'), { childList: true, subtree: true });
+        }
+
+        // Inizializza l'observer e salvalo nella variabile globale
+        observer = new MutationObserver(() => updateBlockIndices());
+        // Avvialo subito
+        observer.observe(document.getElementById('main-editor'), { childList: true, subtree: true });
 
         // --- Save / Load Logic ---
-        function saveProject() {
+        async function saveProject() {
             const root = document.getElementById('main-editor');
             const data = serialize(root);
             const json = JSON.stringify(data, null, 2);
+
+            try {
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: 'flowcode_project.json',
+                        types: [{ description: 'FlowCode JSON', accept: { 'application/json': ['.json'] } }],
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(json);
+                    await writable.close();
+                    log("--- PROGETTO SALVATO (NATIVO) ---", "text-blue-400");
+                    return;
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') console.warn("FS API Error:", err);
+            }
+
             const blob = new Blob([json], {type: "application/json"});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = "flowcode_project.json";
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            log("--- PROGETTO SALVATO ---", "text-blue-400");
+            log("--- PROGETTO SALVATO (DOWNLOAD) ---", "text-blue-400");
         }
 
         function serialize(container) {
             const blocks = [];
             const children = Array.from(container.children).filter(el => el.classList.contains('block-item'));
-            
             children.forEach(el => {
-                const blockData = {
-                    type: el.dataset.type,
-                    inputs: {},
-                    children: []
-                };
+                const blockData = { type: el.dataset.type, inputs: {}, branches: {} };
                 el.querySelectorAll('input, select').forEach(input => {
-                    if (input.closest('.block-item') === el && input.dataset.key) {
-                        blockData.inputs[input.dataset.key] = input.value;
-                    }
+                    if (input.closest('.block-item') === el && input.dataset.key) blockData.inputs[input.dataset.key] = input.value;
                 });
-                const nestedContainer = el.querySelector('.nested-area');
-                if(nestedContainer) {
-                    blockData.children = serialize(nestedContainer);
-                }
+                
+                el.querySelectorAll('.nested-area').forEach(area => {
+                    const branchName = area.dataset.branch || 'default';
+                    blockData.branches[branchName] = serialize(area);
+                });
+                
                 blocks.push(blockData);
             });
             return blocks;
         }
 
-        function loadProject(input) {
+        async function loadProject(input) {
             const file = input.files[0];
             if(!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
+            
+            log(`--- TENTATIVO CARICAMENTO: ${file.name} ---`, "text-yellow-400 font-bold");
+
+            // Disconnetti l'observer per evitare freeze durante l'inserimento massivo (O(N^2))
+            if(observer) observer.disconnect();
+
+            try {
+                // Usa text() invece di FileReader per semplicità e async/await
+                const content = await file.text();
+                
+                if (!content) throw new Error("Il file sembra vuoto.");
+                
+                let data;
                 try {
-                    const data = JSON.parse(e.target.result);
-                    const root = document.getElementById('main-editor');
-                    if(!confirm("Sovrascrivere progetto corrente?")) { input.value = ''; return; }
-                    root.innerHTML = '';
-                    deserialize(data, root);
-                    if(root.children.length === 0) root.innerHTML = `<div id="placeholder-msg" class="flex flex-col items-center justify-center h-full text-slate-500 pointer-events-none select-none"><svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg><p class="font-medium text-lg">Area di Sviluppo</p><p class="text-xs mt-2 opacity-70">Trascina i componenti dalla barra laterale</p></div>`;
-                    log("--- PROGETTO CARICATO ---", "text-purple-400");
-                } catch(err) { alert("Errore nel file JSON: " + err.message); }
-            };
-            reader.readAsText(file);
-            input.value = '';
+                    data = JSON.parse(content);
+                } catch(e) {
+                    throw new Error("Sintassi JSON non valida.");
+                }
+
+                if (!Array.isArray(data)) throw new Error("Struttura JSON non valida (root non è array).");
+
+                const root = document.getElementById('main-editor');
+                if(root.children.length > 0 && root.children[0].id !== 'placeholder-msg') {
+                    if(!confirm("C'è già un progetto aperto. Sostituirlo?")) {
+                        log("Caricamento annullato.", "text-orange-400");
+                        // Riconnetti observer se annulliamo
+                        if(observer) observer.observe(document.getElementById('main-editor'), { childList: true, subtree: true });
+                        input.value = ''; // Reset input
+                        return;
+                    }
+                }
+
+                root.innerHTML = '';
+                deserialize(data, root);
+                
+                if(root.children.length === 0) {
+                     root.innerHTML = `<div id="placeholder-msg" class="flex flex-col items-center justify-center h-full text-slate-500 pointer-events-none select-none"><svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg><p class="font-medium text-lg">Area di Sviluppo</p><p class="text-xs mt-2 opacity-70">Trascina i componenti dalla barra laterale</p></div>`;
+                     log("Il progetto caricato era vuoto.", "text-orange-400");
+                } else {
+                    log("--- CARICAMENTO COMPLETATO ---", "text-green-400 font-bold");
+                    // Aggiorna indici manualmente una volta sola alla fine
+                    updateBlockIndices();
+                }
+            } catch(err) {
+                log(`ERRORE CARICAMENTO: ${err.message}`, "text-red-500 font-bold bg-red-900/20");
+                console.error(err);
+            } finally {
+                input.value = '';
+                // Riconnetti l'observer
+                if(observer) observer.observe(document.getElementById('main-editor'), { childList: true, subtree: true });
+            }
         }
 
         function deserialize(data, container) {
+            if(!Array.isArray(data)) return;
             data.forEach(blockData => {
+                if(!blockData.type) return;
                 const blockEl = createBlockUI(blockData.type);
-                const inputs = blockEl.querySelectorAll('input, select');
-                inputs.forEach(input => {
-                    if (input.closest('.block-item') === blockEl) {
-                        const key = input.dataset.key;
-                        if(key && blockData.inputs[key] !== undefined) input.value = blockData.inputs[key];
-                    }
-                });
+                if(blockData.inputs) {
+                    const inputs = blockEl.querySelectorAll('input, select');
+                    inputs.forEach(input => {
+                        if (input.closest('.block-item') === blockEl) {
+                            const key = input.dataset.key;
+                            if(key && blockData.inputs[key] !== undefined) input.value = blockData.inputs[key];
+                        }
+                    });
+                }
                 container.appendChild(blockEl);
-                if(blockData.children && blockData.children.length > 0) {
+                
+                if (blockData.branches) {
+                    Object.keys(blockData.branches).forEach(branchName => {
+                        const nestedContainer = blockEl.querySelector(`.nested-area[data-branch="${branchName}"]`);
+                        if(nestedContainer) deserialize(blockData.branches[branchName], nestedContainer);
+                    });
+                } else if(blockData.children && blockData.children.length > 0) {
                     const nestedContainer = blockEl.querySelector('.nested-area');
                     if(nestedContainer) deserialize(blockData.children, nestedContainer);
                 }
             });
         }
-
-        // --- Resize Logic ---
-        const grid = document.getElementById('resizable-grid');
-        function setupResizer(resizer, index) {
-            let isDragging = false;
-            resizer.addEventListener('mousedown', () => { isDragging = true; resizer.classList.add('dragging'); document.body.style.cursor = 'col-resize'; });
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                const containerRect = grid.getBoundingClientRect();
-                const columns = grid.style.gridTemplateColumns.split(' ');
-                if (index === 0) {
-                    const newWidth = e.clientX - containerRect.left;
-                    if (newWidth > 150 && newWidth < 500) columns[0] = `${newWidth}px`;
-                } else {
-                    const newWidth = containerRect.right - e.clientX;
-                    if (newWidth > 200 && newWidth < 600) columns[4] = `${newWidth}px`;
-                }
-                grid.style.gridTemplateColumns = columns.join(' ');
-            });
-            document.addEventListener('mouseup', () => { isDragging = false; resizer.classList.remove('dragging'); document.body.style.cursor = 'default'; });
-        }
-        setupResizer(document.getElementById('resizer-left'), 0);
-        setupResizer(document.getElementById('resizer-right'), 1);
 
         // --- Drag & Drop ---
         function allowDrop(ev) { ev.preventDefault(); }
@@ -397,6 +493,7 @@
                 if (afterElement == null) targetContainer.appendChild(block);
                 else targetContainer.insertBefore(block, afterElement);
             }
+            // updateBlockIndices(); // Lasciamo fare all'observer per evitare doppi aggiornamenti
         }
         function getDragAfterElement(container, y) {
             const draggableElements = [...container.children].filter(child => child.classList.contains('block-item') && !child.classList.contains('dragging-now'));
@@ -419,46 +516,144 @@
             div.addEventListener('dragstart', handleDragStartInternal, false);
             div.addEventListener('dragend', handleDragEndInternal, false);
 
+            // Indice visuale
+            const idxSpan = document.createElement('span');
+            idxSpan.className = 'block-index';
+            idxSpan.innerText = '#?';
+            div.appendChild(idxSpan);
+
             let color = "border-slate-500";
-            let content = `<div class="flex flex-wrap items-center gap-2">`;
+            let content = `<div class="flex flex-wrap items-center gap-2 w-full">`; 
 
             switch(type) {
-                case 'decl': color = "border-sky-500"; content += `<span class="font-bold text-sky-400 text-xs">VAR</span><input class="w-20 font-bold" placeholder="nome" data-key="name"><span class="text-xs text-slate-400">tipo</span><select data-key="vtype"><option value="string">String</option><option value="int">Int</option><option value="float">Float</option><option value="bool">Bool</option></select>`; break;
-                case 'assign': color = "border-blue-500"; content += `<input class="w-20 font-bold text-blue-300" placeholder="Variabile" data-key="var"><span class="font-bold text-slate-400">=</span><input class="w-32" placeholder="Valore/Espressione" data-key="val">`; break;
+                // GOTO / FLOW CONTROL
+                case 'jump_to': {
+                    color = "border-yellow-500";
+                    content += `<span class="font-bold text-yellow-500 text-xs">VAI A (GOTO)</span><span class="text-xs">Linea</span><input type="number" class="w-16 font-bold text-yellow-300" placeholder="#" data-key="target">`;
+                    break;
+                }
+                case 'restart': {
+                    color = "border-yellow-300";
+                    content += `<span class="font-bold text-yellow-300 text-xs">🔁 RIAVVIA PROGRAMMA (Restart)</span>`;
+                    break;
+                }
+                case 'terminate': {
+                    color = "border-red-600";
+                    content += `<span class="font-bold text-red-500 text-xs">🛑 TERMINA ESECUZIONE (End)</span>`;
+                    break;
+                }
+
+                case 'decl': color = "border-sky-500"; content += `<span class="font-bold text-sky-400 text-xs">VAR</span><input class="flex-1 min-w-[60px]" placeholder="nome" data-key="name"><span class="text-xs text-slate-400">tipo</span><select data-key="vtype"><option value="string">String</option><option value="int">Int</option><option value="float">Float</option><option value="bool">Bool</option></select>`; break;
+                case 'assign': color = "border-blue-500"; content += `<input class="w-20 font-bold text-blue-300" placeholder="Variabile" data-key="var"><span class="font-bold text-slate-400">=</span><input class="flex-1 min-w-[100px]" placeholder="Valore/Espressione" data-key="val">`; break;
                 case 'inc': color = "border-indigo-500"; content += `<span class="font-bold text-indigo-400 text-xs">INC</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-indigo-300">++</span>`; break;
-                case 'calc': color = "border-orange-500"; content += `<span class="font-bold text-orange-500 text-xs">CALC</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-16" placeholder="A" data-key="a"><select data-key="op" class="font-bold text-orange-400"><option value="+">+</option><option value="-">-</option><option value="*">×</option><option value="/">÷</option><option value="%">MOD</option><option value="^">POW</option></select><input class="w-16" placeholder="B" data-key="b">`; break;
-                case 'math_pro': color = "border-orange-600"; content += `<span class="font-bold text-orange-600 text-xs">MATH</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="sqrt">Radice Quadra</option><option value="sin">Seno</option><option value="cos">Coseno</option><option value="tan">Tangente</option><option value="abs">Assoluto</option><option value="round">Arrotonda</option><option value="floor">Difetto (Floor)</option><option value="ceil">Eccesso (Ceil)</option></select><span class="text-xs">(</span><input class="w-16" placeholder="Val" data-key="val"><span class="text-xs">)</span>`; break;
-                case 'str_join': color = "border-teal-500"; content += `<span class="font-bold text-teal-500 text-xs">CONCAT</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo A" data-key="a"><span class="text-xs">+</span><input class="w-20" placeholder="Testo B" data-key="b">`; break;
-                case 'str_info': color = "border-teal-600"; content += `<span class="font-bold text-teal-600 text-xs">STR INFO</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="upper">MAIUSCOLO</option><option value="lower">minuscolo</option></select><span class="text-xs">di</span><input class="w-20" placeholder="Testo" data-key="src">`; break;
-                case 'str_sub': color = "border-teal-400"; content += `<span class="font-bold text-teal-400 text-xs">SUBSTR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">da</span><input type="number" class="w-10" value="0" data-key="start"><span class="text-[9px]">a</span><input type="number" class="w-10" value="5" data-key="end">`; break;
-                case 'str_split': color = "border-teal-300"; content += `<span class="font-bold text-teal-300 text-xs">SPLIT</span><input class="w-20 font-bold" placeholder="Lista Dest" data-key="dest"><span class="text-xs">=</span><input class="w-20" placeholder="Testo" data-key="src"><span class="text-[9px]">su</span><input class="w-10" value="," data-key="delim">`; break;
-                case 'str_replace': color = "border-teal-700"; content += `<span class="font-bold text-teal-700 text-xs">REPLACE</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">:</span><input class="w-16" placeholder="Old" data-key="old"><span class="text-xs">→</span><input class="w-16" placeholder="New" data-key="new">`; break;
-                case 'list_new': color = "border-cyan-500"; content += `<span class="font-bold text-cyan-500 text-xs">LISTA</span><input class="w-24 font-bold" placeholder="Nome Lista" data-key="var"><span class="text-xs text-cyan-400">= [] (Vuota)</span>`; break;
-                case 'list_add': color = "border-cyan-600"; content += `<span class="font-bold text-cyan-600 text-xs">PUSH</span><input class="w-24" placeholder="Valore" data-key="val"><span class="text-xs">in</span><input class="w-24 font-bold" placeholder="Lista" data-key="list">`; break;
-                case 'list_get': color = "border-cyan-400"; content += `<span class="font-bold text-cyan-400 text-xs">GET</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20" font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">]</span>`; break;
-                case 'list_set': color = "border-cyan-700"; content += `<span class="font-bold text-cyan-700 text-xs">SET</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">] =</span><input class="w-20" placeholder="Val" data-key="val">`; break;
-                case 'list_op': color = "border-cyan-300"; content += `<span class="font-bold text-cyan-300 text-xs">ARRAY OP</span><input class="w-20 font-bold" placeholder="Lista/Var" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="sort">Ordina (A-Z)</option><option value="reverse">Inverti</option><option value="shuffle">Mescola</option><option value="clear">Svuota</option></select><span class="text-xs">su</span><input class="w-20" placeholder="Lista" data-key="list">`; break;
-                case 'if': color = "border-indigo-500"; content += `<span class="font-bold text-indigo-400 text-xs">SE</span><input class="w-40 font-bold text-indigo-200" placeholder="cond es: x == 'si'" data-key="cond"><span class="text-xs text-indigo-400">ALLORA:</span>`; break;
-                case 'while': color = "border-purple-500"; content += `<span class="font-bold text-purple-400 text-xs">MENTRE</span><input class="w-40 font-bold text-purple-200" placeholder="condizione" data-key="cond"><span class="text-xs text-purple-400">FAI:</span>`; break;
-                case 'repeat': color = "border-fuchsia-500"; content += `<span class="font-bold text-fuchsia-400 text-xs">RIPETI</span><input type="number" class="w-16" value="5" data-key="times"><span class="text-xs text-fuchsia-400">VOLTE:</span>`; break;
-                case 'break': color = "border-red-500"; content += `<span class="font-bold text-red-500 text-xs">⛔ INTERROMPI CICLO</span>`; break;
-                case 'rand_int': color = "border-pink-500"; content += `<span class="font-bold text-pink-500 text-xs">RND INT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="100" data-key="max">`; break;
-                case 'rand_float': color = "border-pink-600"; content += `<span class="font-bold text-pink-600 text-xs">RND FLOAT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0.0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="1.0" data-key="max">`; break;
-                case 'rand_bool': color = "border-pink-400"; content += `<span class="font-bold text-pink-400 text-xs">RND BOOL</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`; break;
-                case 'rand_color': color = "border-rose-500"; content += `<span class="font-bold text-rose-500 text-xs">RND HEX</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-rose-300">Genera #Colore</span>`; break;
-                case 'rand_list_elem': color = "border-rose-400"; content += `<span class="font-bold text-rose-400 text-xs">PESCA</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">da</span><input class="w-20 font-bold" placeholder="Lista" data-key="list">`; break;
-                case 'rand_string': color = "border-pink-300"; content += `<span class="font-bold text-pink-300 text-xs">RND STR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">Len:</span><input type="number" class="w-12" value="8" data-key="len">`; break;
-                case 'rand_emoji': color = "border-pink-700"; content += `<span class="font-bold text-pink-700 text-xs">RND EMOJI</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`; break;
-                case 'input': color = "border-emerald-500"; content += `<span class="font-bold text-emerald-500 text-xs">INPUT</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var">`; break;
-                case 'output': color = "border-emerald-600"; content += `<span class="font-bold text-emerald-600 text-xs">PRINT</span><input class="w-48" placeholder="Messaggio o Variabile" data-key="msg">`; break;
-                case 'wait': color = "border-amber-500"; content += `<span class="font-bold text-amber-500 text-xs">SLEEP</span><input type="number" step="0.1" class="w-16" value="1.0" data-key="sec"><span class="text-xs">s</span>`; break;
-                case 'comment': color = "border-slate-600"; content += `<span class="font-bold text-slate-400 text-xs italic">//</span><input class="w-64 italic text-slate-400 bg-transparent border-none" placeholder="Scrivi un commento..." data-key="text">`; break;
+                
+                case 'calc': {
+                    color = "border-orange-500"; content += `<span class="font-bold text-orange-500 text-xs">CALC</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="flex-1 min-w-[40px]" placeholder="A" data-key="a"><select data-key="op" class="font-bold text-orange-400"><option value="+">+</option><option value="-">-</option><option value="*">×</option><option value="/">÷</option><option value="%">MOD</option><option value="^">POW</option></select><input class="flex-1 min-w-[40px]" placeholder="B" data-key="b">`; break;
+                }
+                case 'math_pro': {
+                    color = "border-orange-600"; content += `<span class="font-bold text-orange-600 text-xs">MATH</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="sqrt">Radice Quadra</option><option value="sin">Seno</option><option value="cos">Coseno</option><option value="tan">Tangente</option><option value="abs">Assoluto</option><option value="round">Arrotonda</option><option value="floor">Difetto (Floor)</option><option value="ceil">Eccesso (Ceil)</option></select><span class="text-xs">(</span><input class="flex-1 min-w-[60px]" placeholder="Val" data-key="val"><span class="text-xs">)</span>`; break;
+                }
+
+                case 'str_join': {
+                    color = "border-teal-500"; content += `<span class="font-bold text-teal-500 text-xs">CONCAT</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="flex-1 min-w-[60px]" placeholder="Testo A" data-key="a"><span class="text-xs">+</span><input class="flex-1 min-w-[60px]" placeholder="Testo B" data-key="b">`; break;
+                }
+                case 'str_info': {
+                    color = "border-teal-600"; content += `<span class="font-bold text-teal-600 text-xs">STR INFO</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="upper">MAIUSCOLO</option><option value="lower">minuscolo</option></select><span class="text-xs">di</span><input class="flex-1 min-w-[60px]" placeholder="Testo" data-key="src">`; break;
+                }
+                case 'str_sub': {
+                    color = "border-teal-400"; content += `<span class="font-bold text-teal-400 text-xs">SUBSTR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="flex-1 min-w-[60px]" placeholder="Testo" data-key="src"><span class="text-[9px]">da</span><input type="number" class="w-10" value="0" data-key="start"><span class="text-[9px]">a</span><input type="number" class="w-10" value="5" data-key="end">`; break;
+                }
+                case 'str_split': {
+                    color = "border-teal-300"; content += `<span class="font-bold text-teal-300 text-xs">SPLIT</span><input class="w-20 font-bold" placeholder="Lista Dest" data-key="dest"><span class="text-xs">=</span><input class="flex-1 min-w-[60px]" placeholder="Testo" data-key="src"><span class="text-[9px]">su</span><input class="w-10" value="," data-key="delim">`; break;
+                }
+                case 'str_replace': {
+                    color = "border-teal-700"; content += `<span class="font-bold text-teal-700 text-xs">REPLACE</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">:</span><input class="flex-1 min-w-[40px]" placeholder="Old" data-key="old"><span class="text-xs">→</span><input class="flex-1 min-w-[40px]" placeholder="New" data-key="new">`; break;
+                }
+
+                case 'list_new': {
+                    color = "border-cyan-500"; content += `<span class="font-bold text-cyan-500 text-xs">LISTA</span><input class="w-24 font-bold" placeholder="Nome Lista" data-key="var"><span class="text-xs text-cyan-400">= [] (Vuota)</span>`; break;
+                }
+                case 'list_add': {
+                    color = "border-cyan-600"; content += `<span class="font-bold text-cyan-600 text-xs">PUSH</span><input class="flex-1 min-w-[60px]" placeholder="Valore" data-key="val"><span class="text-xs">in</span><input class="w-24 font-bold" placeholder="Lista" data-key="list">`; break;
+                }
+                case 'list_get': {
+                    color = "border-cyan-400"; content += `<span class="font-bold text-cyan-400 text-xs">GET</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">=</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">]</span>`; break;
+                }
+                case 'list_set': {
+                    color = "border-cyan-700"; content += `<span class="font-bold text-cyan-700 text-xs">SET</span><input class="w-20 font-bold" placeholder="Lista" data-key="list"><span class="text-xs">[</span><input type="number" class="w-12" placeholder="idx" data-key="idx"><span class="text-xs">] =</span><input class="flex-1 min-w-[60px]" placeholder="Val" data-key="val">`; break;
+                }
+                case 'list_op': {
+                    color = "border-cyan-300"; content += `<span class="font-bold text-cyan-300 text-xs">ARRAY OP</span><input class="w-20 font-bold" placeholder="Lista/Var" data-key="dest"><span class="text-xs">=</span><select data-key="op"><option value="len">Lunghezza</option><option value="sort">Ordina (A-Z)</option><option value="reverse">Inverti</option><option value="shuffle">Mescola</option><option value="clear">Svuota</option></select><span class="text-xs">su</span><input class="flex-1 min-w-[60px]" placeholder="Lista" data-key="list">`; break;
+                }
+
+                case 'if_else': {
+                    color = "border-indigo-500"; 
+                    content += `<div class="flex flex-col w-full gap-2"><div class="flex items-center gap-2"><span class="font-bold text-indigo-400 text-xs">SE</span><input class="flex-1 min-w-[100px] font-bold text-indigo-200" placeholder="es: x > 10" data-key="cond"><span class="text-xs text-indigo-400">ALLORA:</span></div></div>`; 
+                    break;
+                }
+                case 'while': {
+                    color = "border-purple-500"; content += `<span class="font-bold text-purple-400 text-xs">MENTRE</span><input class="flex-1 min-w-[100px] font-bold text-purple-200" placeholder="condizione" data-key="cond"><span class="text-xs text-purple-400">FAI:</span>`; break;
+                }
+                case 'repeat': {
+                    color = "border-fuchsia-500"; content += `<span class="font-bold text-fuchsia-400 text-xs">RIPETI</span><input type="number" class="w-16" value="5" data-key="times"><span class="text-xs text-fuchsia-400">VOLTE:</span>`; break;
+                }
+                case 'break': {
+                    color = "border-red-500"; content += `<span class="font-bold text-red-500 text-xs">⛔ INTERROMPI CICLO</span>`; break;
+                }
+                case 'ret_void': {
+                    color = "border-red-600"; content += `<span class="font-bold text-red-600 text-xs">RITORNA (Void)</span>`; break;
+                }
+                case 'ret_val': {
+                    color = "border-red-400"; content += `<span class="font-bold text-red-400 text-xs">RITORNA</span><input class="flex-1 min-w-[80px]" placeholder="Valore/Variabile" data-key="val">`; break;
+                }
+
+                case 'rand_int': {
+                    color = "border-pink-500"; content += `<span class="font-bold text-pink-500 text-xs">RND INT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="100" data-key="max">`; break;
+                }
+                case 'rand_float': {
+                    color = "border-pink-600"; content += `<span class="font-bold text-pink-600 text-xs">RND FLOAT</span><input class="w-16 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">da</span><input type="number" class="w-12" value="0.0" data-key="min"><span class="text-xs">a</span><input type="number" class="w-12" value="1.0" data-key="max">`; break;
+                }
+                case 'rand_bool': {
+                    color = "border-pink-400"; content += `<span class="font-bold text-pink-400 text-xs">RND BOOL</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`; break;
+                }
+                case 'rand_color': {
+                    color = "border-rose-500"; content += `<span class="font-bold text-rose-500 text-xs">RND HEX</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs text-rose-300">Genera #Colore</span>`; break;
+                }
+                case 'rand_list_elem': {
+                    color = "border-rose-400"; content += `<span class="font-bold text-rose-400 text-xs">PESCA</span><input class="w-20 font-bold" placeholder="Variabile" data-key="dest"><span class="text-xs">da</span><input class="flex-1 min-w-[60px]" placeholder="Lista" data-key="list">`; break;
+                }
+                case 'rand_string': {
+                    color = "border-pink-300"; content += `<span class="font-bold text-pink-300 text-xs">RND STR</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var"><span class="text-xs">Len:</span><input type="number" class="w-12" value="8" data-key="len">`; break;
+                }
+                case 'rand_emoji': {
+                    color = "border-pink-700"; content += `<span class="font-bold text-pink-700 text-xs">RND EMOJI</span><input class="w-20 font-bold" placeholder="Variabile" data-key="var">`; break;
+                }
+
+                case 'input': {
+                    color = "border-emerald-500"; content += `<span class="font-bold text-emerald-500 text-xs">INPUT</span><input class="w-24 font-bold" placeholder="Variabile" data-key="var">`; break;
+                }
+                case 'output': {
+                    color = "border-emerald-600"; content += `<span class="font-bold text-emerald-600 text-xs">PRINT</span><input class="flex-1 min-w-[100px]" placeholder="Messaggio o Variabile" data-key="msg">`; break;
+                }
+                case 'wait': {
+                    color = "border-amber-500"; content += `<span class="font-bold text-amber-500 text-xs">SLEEP</span><input type="number" step="0.1" class="w-16" value="1.0" data-key="sec"><span class="text-xs">s</span>`; break;
+                }
+                case 'comment': {
+                    color = "border-slate-600"; content += `<span class="font-bold text-slate-400 text-xs italic">//</span><input class="flex-1 min-w-[100px] italic text-slate-400 bg-transparent border-none" placeholder="Scrivi un commento..." data-key="text">`; break;
+                }
             }
 
             content += `<button onclick="removeBlock('${id}')" class="ml-auto text-slate-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>`;
 
-            if (['if', 'while', 'repeat'].includes(type)) {
+            if (['while', 'repeat'].includes(type)) {
                 content += `<div id="${id}-children" class="nested-area block-container min-h-[50px] border-dashed border-slate-600" ondrop="onDrop(event, '${id}-children')" ondragover="allowDrop(event)"></div>`;
+            } 
+            else if (type === 'if_else') {
+                content += `
+                    <div class="nested-area block-container min-h-[40px] border-dashed border-indigo-700/50 mb-2" data-branch="true" ondrop="onDrop(event, '${id}-true')" ondragover="allowDrop(event)" id="${id}-true"></div>
+                    <div class="text-xs font-bold text-indigo-400 mb-1 ml-1">ALTRIMENTI (Else):</div>
+                    <div class="nested-area block-container min-h-[40px] border-dashed border-indigo-900/50" data-branch="false" ondrop="onDrop(event, '${id}-false')" ondragover="allowDrop(event)" id="${id}-false"></div>
+                `;
             }
 
             div.innerHTML = content;
@@ -466,7 +661,11 @@
             return div;
         }
 
-        function removeBlock(id) { document.getElementById(id)?.remove(); }
+        function removeBlock(id) { 
+            document.getElementById(id)?.remove(); 
+            // FIX: Rimosso updateBlockIndices() esplicito perché l'Observer ora funziona correttamente
+            // e gestisce la rimozione rilevando il cambio nel DOM.
+        }
         function clearConsole() { document.getElementById('console-output').innerHTML = '<div class="text-slate-600 italic">// Console pulita.</div>'; }
 
         // --- Interpreter ---
@@ -475,26 +674,48 @@
             isRunning = true;
             stopLoops = false;
             
-            // UI Toggle
             document.getElementById('run-btn').classList.add('hidden');
             document.getElementById('stop-btn').classList.remove('hidden');
-            document.getElementById('main-editor').classList.add('editor-locked'); // Lock editor
+            document.getElementById('main-editor').classList.add('editor-locked'); 
             
             clearConsole();
             variables = {};
             updateVarsUI();
+            updateBlockIndices(); // Ensure indices are fresh
             log("--- AVVIO PROGRAMMA ---", "text-slate-400");
 
-            const rootBlocks = Array.from(document.getElementById('main-editor').children).filter(el => el.id !== 'placeholder-msg');
+            const rootEditor = document.getElementById('main-editor');
+            
+            // Loop principale per gestire i salti (GOTO)
             try {
-                await executeBlockList(rootBlocks);
+                // Iniziamo dal primo blocco
+                let nextBlock = rootEditor.firstElementChild; 
+                // Skip placeholder se esiste
+                if (nextBlock && nextBlock.id === 'placeholder-msg') nextBlock = null;
+
+                // Se non c'è nulla, o solo placeholder, usiamo lista vuota
+                let currentBlockList = Array.from(rootEditor.children).filter(el => el.classList.contains('block-item'));
+                
+                // Eseguiamo la lista principale
+                // La gestione del GOTO richiede di catturare l'eccezione e riavviare l'esecuzione da un punto specifico
+                await executeContext(currentBlockList);
+                
                 log("--- PROGRAMMA TERMINATO ---", "text-slate-400");
             } catch (err) {
-                if (err.message !== "STOP") log(`ERRORE RUNTIME: ${err.message}`, "text-red-400 font-bold");
-                else log("--- ARRESTO FORZATO ---", "text-red-500 font-bold");
+                if (err.message.startsWith("RETURN_VAL:")) {
+                    const retVal = err.message.substring(11);
+                    log(`Programma terminato con valore: ${retVal}`, "text-green-400 font-bold");
+                } else if (err.message === "RETURN_VOID") {
+                    log("Programma terminato (Return)", "text-green-400 font-bold");
+                } else if (err.message === "TERMINATE") {
+                    log("Programma terminato forzatamente (STOP)", "text-red-400 font-bold");
+                } else if (err.message !== "STOP") {
+                    log(`ERRORE FATALE: ${err.message}`, "text-red-400 font-bold");
+                } else {
+                    log("--- ARRESTO MANUALE ---", "text-red-500 font-bold");
+                }
             }
 
-            // Restore UI
             isRunning = false;
             document.getElementById('run-btn').classList.remove('hidden');
             document.getElementById('stop-btn').classList.add('hidden');
@@ -505,6 +726,44 @@
         function stopExecution() {
             if(isRunning) {
                 stopLoops = true;
+            }
+        }
+
+        // Wrapper per gestire i salti (GOTO) a livello globale
+        async function executeContext(blockList) {
+            let activeList = [...blockList]; // Copia per manipolazione
+
+            while (activeList.length > 0) {
+                try {
+                    await executeBlockList(activeList);
+                    break; // Se finisce senza errori, usciamo dal loop del contesto
+                } catch (e) {
+                    if (e.message.startsWith("GOTO:")) {
+                        const targetIndex = parseInt(e.message.split(":")[1]);
+                        log(`>> Salto alla linea #${targetIndex}`, "text-yellow-400");
+                        
+                        // Trova il blocco nel DOM globale
+                        const targetBlock = document.querySelector(`.block-item[data-exec-index="${targetIndex}"]`);
+                        
+                        if (!targetBlock) {
+                            throw new Error(`GOTO Fallito: Linea #${targetIndex} non trovata.`);
+                        }
+
+                        // Trova il contenitore del blocco target per capire il contesto
+                        const parentContainer = targetBlock.parentElement;
+                        const siblings = Array.from(parentContainer.children).filter(el => el.classList.contains('block-item'));
+                        const startIndex = siblings.indexOf(targetBlock);
+                        
+                        // Resetta la lista attiva per ripartire da quel blocco
+                        // NOTA: Questo "salto" appiattisce lo stack se saltiamo fuori da un loop, 
+                        // ma se saltiamo dentro un loop esegue solo il corpo una volta. 
+                        // È un comportamento "GOTO" standard per interpreti semplici.
+                        activeList = siblings.slice(startIndex);
+                        continue; // Ricomincia il while con la nuova lista
+                    } else {
+                        throw e; // Rilancia altri errori (STOP, RETURN, Errori Runtime)
+                    }
+                }
             }
         }
 
@@ -525,12 +784,25 @@
 
                 try {
                     switch(type) {
-                        case 'comment': break; // Ignora
+                        // --- FLUSSO & GOTO ---
+                        case 'jump_to': {
+                            const target = parseInt(data.target);
+                            if (isNaN(target)) throw new Error("Indice GOTO non valido");
+                            // Lancia un'eccezione speciale che verrà catturata da executeContext
+                            throw new Error(`GOTO:${target}`);
+                        }
+                        case 'restart': {
+                            throw new Error(`GOTO:1`);
+                        }
+                        case 'terminate': {
+                            throw new Error("TERMINATE");
+                        }
+
+                        case 'comment': break; 
                         case 'decl':
                             const dName = (data.name || "anon").trim();
-                            // Inizializza con stringa vuota per evitare 0 su stringhe
                             variables[dName] = { int:0, float:0.0, string:"", bool:false }[data.vtype];
-                            if(variables[dName] === undefined) variables[dName] = 0; // Fallback
+                            if(variables[dName] === undefined) variables[dName] = 0; 
                             break;
                         case 'assign':
                             const aVar = (data.var || "").trim();
@@ -544,8 +816,7 @@
                             if(iVar && typeof variables[iVar] === 'number') variables[iVar]++;
                             break;
                         
-                        // MATH
-                        case 'calc':
+                        case 'calc': {
                             const cDest = (data.dest || "").trim();
                             const valA = Number(evalInContext(data.a || "0"));
                             const valB = Number(evalInContext(data.b || "0"));
@@ -558,7 +829,8 @@
                                 else if(data.op === '^') variables[cDest] = Math.pow(valA, valB);
                             }
                             break;
-                        case 'math_pro':
+                        }
+                        case 'math_pro': {
                             const mDest = (data.dest || "").trim();
                             const mVal = Number(evalInContext(data.val || "0"));
                             if (mDest) {
@@ -574,15 +846,16 @@
                                 }
                             }
                             break;
+                        }
 
-                        // STRINGHE
-                        case 'str_join':
+                        case 'str_join': {
                             const jDest = (data.dest || "").trim();
                             const s1 = String(evalInContext(data.a || ""));
                             const s2 = String(evalInContext(data.b || ""));
                             if(jDest) variables[jDest] = s1 + s2;
                             break;
-                        case 'str_info':
+                        }
+                        case 'str_info': {
                             const iDest = (data.dest || "").trim();
                             const srcTxt = String(evalInContext(data.src || ""));
                             if(iDest) {
@@ -591,46 +864,53 @@
                                 else if(data.op === 'lower') variables[iDest] = srcTxt.toLowerCase();
                             }
                             break;
-                        case 'str_sub':
+                        }
+                        case 'str_sub': {
                             const subDest = (data.dest || "").trim();
                             const subSrc = String(evalInContext(data.src || ""));
                             if(subDest) variables[subDest] = subSrc.substring(parseInt(data.start), parseInt(data.end));
                             break;
-                        case 'str_split':
+                        }
+                        case 'str_split': {
                             const splitDest = (data.dest || "").trim();
                             const splitSrc = String(evalInContext(data.src || ""));
                             if(splitDest) variables[splitDest] = splitSrc.split(data.delim || ",");
                             break;
-                        case 'str_replace':
+                        }
+                        case 'str_replace': {
                             const rVar = (data.var || "").trim();
                             const rOld = String(evalInContext(data.old || ""));
                             const rNew = String(evalInContext(data.new || ""));
                             if(rVar && variables[rVar]) variables[rVar] = String(variables[rVar]).replaceAll(rOld, rNew);
                             break;
+                        }
 
-                        // LISTE
-                        case 'list_new':
+                        case 'list_new': {
                             const lVar = (data.var || "").trim();
                             if(lVar) variables[lVar] = [];
                             break;
-                        case 'list_add':
+                        }
+                        case 'list_add': {
                             const lList = (data.list || "").trim();
                             const lVal = evalInContext(data.val || "0");
                             if(lList && Array.isArray(variables[lList])) variables[lList].push(lVal);
                             break;
-                        case 'list_get':
+                        }
+                        case 'list_get': {
                             const gDest = (data.dest || "").trim();
                             const gList = (data.list || "").trim();
                             const gIdx = parseInt(evalInContext(data.idx || "0"));
                             if(gDest && Array.isArray(variables[gList])) variables[gDest] = variables[gList][gIdx];
                             break;
-                        case 'list_set':
+                        }
+                        case 'list_set': {
                             const sList = (data.list || "").trim();
                             const sIdx = parseInt(evalInContext(data.idx || "0"));
                             const sVal = evalInContext(data.val || "0");
                             if(sList && Array.isArray(variables[sList])) variables[sList][sIdx] = sVal;
                             break;
-                        case 'list_op':
+                        }
+                        case 'list_op': {
                             const loDest = (data.dest || "").trim();
                             const loList = (data.list || "").trim();
                             const arr = variables[loList];
@@ -642,29 +922,33 @@
                                 else if (data.op === 'clear') variables[loList] = [];
                             }
                             break;
+                        }
 
-                        // RANDOM
-                        case 'rand_int':
+                        case 'rand_int': {
                             const riVar = (data.var || "").trim();
                             const riMin = parseInt(data.min) || 0;
                             const riMax = parseInt(data.max) || 100;
                             if(riVar) variables[riVar] = Math.floor(Math.random() * (riMax - riMin + 1)) + riMin;
                             break;
-                        case 'rand_float':
+                        }
+                        case 'rand_float': {
                             const rfVar = (data.var || "").trim();
                             const rfMin = parseFloat(data.min) || 0;
                             const rfMax = parseFloat(data.max) || 1;
                             if(rfVar) variables[rfVar] = Math.random() * (rfMax - rfMin) + rfMin;
                             break;
-                        case 'rand_bool':
+                        }
+                        case 'rand_bool': {
                             const rbVar = (data.var || "").trim();
                             if(rbVar) variables[rbVar] = Math.random() >= 0.5;
                             break;
-                        case 'rand_color':
+                        }
+                        case 'rand_color': {
                             const rcVar = (data.var || "").trim();
                             if(rcVar) variables[rcVar] = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
                             break;
-                        case 'rand_list_elem':
+                        }
+                        case 'rand_list_elem': {
                             const rleDest = (data.dest || "").trim();
                             const rleList = (data.list || "").trim();
                             if (rleDest && Array.isArray(variables[rleList]) && variables[rleList].length > 0) {
@@ -672,7 +956,8 @@
                                 variables[rleDest] = variables[rleList][rndIdx];
                             }
                             break;
-                        case 'rand_string':
+                        }
+                        case 'rand_string': {
                             const rStrVar = (data.var || "").trim();
                             const rStrLen = parseInt(data.len) || 8;
                             if (rStrVar) {
@@ -682,39 +967,37 @@
                                 variables[rStrVar] = result;
                             }
                             break;
-                        case 'rand_emoji':
+                        }
+                        case 'rand_emoji': {
                             const rEmoVar = (data.var || "").trim();
                             if (rEmoVar) {
                                 const emojis = ['😀','😂','😍','😎','🤔','👍','👎','🔥','✨','🚀','💻','🍕','🚗','🐶','🐱','🌟','🎉'];
                                 variables[rEmoVar] = emojis[Math.floor(Math.random() * emojis.length)];
                             }
                             break;
+                        }
 
-                        // IO
-                        case 'input':
+                        case 'input': {
                             const inpVar = (data.var || "").trim();
                             if(inpVar) {
                                 let input = prompt(`Inserisci valore per ${inpVar}:`);
                                 variables[inpVar] = (input !== null && !isNaN(input) && input.trim() !== "") ? Number(input) : (input || "");
                             }
                             break;
-                        case 'output':
+                        }
+                        case 'output': {
                             const msgExpr = (data.msg || "").trim();
                             let result;
                             try {
-                                // Supporta virgola come separatore (stile Python/JS console)
-                                // Avvolgiamo in array per gestire sequenze
                                 const safeExpr = msgExpr.startsWith('[') ? msgExpr : `[${msgExpr}]`;
                                 const evalRes = new Function(...Object.keys(variables), `return ${safeExpr}`)(...Object.values(variables));
                                 
                                 if (Array.isArray(evalRes)) {
-                                    // Mappa ogni elemento usando formatVar (per gestire liste interne) poi unisci
                                     result = evalRes.map(item => formatVar(item)).join(' '); 
                                 } else {
                                     result = formatVar(evalRes);
                                 }
                             } catch (e) {
-                                // Analisi errore migliorata
                                 let tip = "";
                                 if (e.message.includes("Unexpected identifier") || e.message.includes("missing )")) {
                                     tip = " (Hai dimenticato un '+' o una ',' tra testo e variabile?)";
@@ -725,57 +1008,81 @@
                             }
                             log(result);
                             break;
-                        case 'wait':
+                        }
+                        case 'wait': {
                             let sec = Math.max(0, parseFloat(data.sec) || 0);
                             await new Promise(r => setTimeout(r, sec * 1000));
                             break;
+                        }
 
-                        // FLOW
-                        case 'if':
+                        case 'if_else': {
+                            const trueContainer = blockEl.querySelector('.nested-area[data-branch="true"]');
+                            const falseContainer = blockEl.querySelector('.nested-area[data-branch="false"]');
+                            
+                            // Usiamo executeContext invece di executeBlockList direttamente per supportare GOTO interni
                             if (evalInContext(data.cond || "false")) {
-                                await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children));
+                                if(trueContainer) await executeContext(Array.from(trueContainer.children));
+                            } else {
+                                if(falseContainer) await executeContext(Array.from(falseContainer.children));
                             }
                             break;
-                        case 'while':
+                        }
+                        case 'while': {
                             let wSafety = 0;
                             while (evalInContext(data.cond || "false")) {
                                 if (!isRunning || stopLoops) throw new Error("STOP");
-                                try { await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children)); }
+                                try { 
+                                    await executeContext(Array.from(document.getElementById(blockEl.id + '-children').children)); 
+                                }
                                 catch (e) { if (e.message === "BREAK") break; throw e; }
                                 if (++wSafety > 5000) throw new Error("Loop infinito (Security Break)");
                                 await new Promise(r => setTimeout(r, 0));
                             }
                             break;
-                        case 'repeat':
+                        }
+                        case 'repeat': {
                             const times = parseInt(data.times) || 0;
                             for (let i = 0; i < times; i++) {
                                 if (!isRunning || stopLoops) throw new Error("STOP");
-                                try { await executeBlockList(Array.from(document.getElementById(blockEl.id + '-children').children)); }
+                                try { 
+                                    await executeContext(Array.from(document.getElementById(blockEl.id + '-children').children)); 
+                                }
                                 catch (e) { if (e.message === "BREAK") break; throw e; }
                                 await new Promise(r => setTimeout(r, 0));
                             }
                             break;
+                        }
                         case 'break':
                             throw new Error("BREAK");
+                        case 'ret_void':
+                            throw new Error("RETURN_VOID");
+                        case 'ret_val': {
+                            const rv = evalInContext(data.val);
+                            throw new Error("RETURN_VAL:" + formatVar(rv));
+                        }
                     }
                 } catch (e) { 
                     if (e.message === "BREAK") { blockEl.classList.remove('executing'); throw e; }
                     if (e.message === "STOP") throw e;
+                    if (e.message === "RETURN_VOID") throw e;
+                    if (e.message === "TERMINATE") throw e;
+                    if (e.message.startsWith("RETURN_VAL:")) throw e;
+                    if (e.message.startsWith("GOTO:")) { blockEl.classList.remove('executing'); throw e; } // Rilancia GOTO al contesto superiore
+                    
                     log(`ERRORE: ${e.message}`, "text-red-400");
                     isRunning = false; 
                 }
 
                 updateVarsUI();
                 blockEl.classList.remove('executing');
-                await new Promise(r => setTimeout(r, 50)); // Visual delay
+                await new Promise(r => setTimeout(r, 50)); 
             }
         }
 
         function evalInContext(expr) {
             const e = (expr || "").trim();
             if (!e) return false;
-            try { return new Function(...Object.keys(variables), `return ${e}`)(...Object.values(variables)); }
-            catch { return e; }
+            return new Function(...Object.keys(variables), `return ${e}`)(...Object.values(variables));
         }
 
         function formatVar(v) {

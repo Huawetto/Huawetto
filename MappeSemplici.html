@@ -7,14 +7,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
     <style>
         :root {
-            --bg-color: #f3f4f6;
+            --bg-color: #f8fafc;
             --toolbar-bg: #ffffff;
             --sidebar-bg: #ffffff;
-            --border-color: #e5e7eb;
+            --border-color: #e2e8f0;
             --primary: #3b82f6;
             --primary-hover: #2563eb;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
         }
 
         * {
@@ -60,16 +60,25 @@
             transition: all 0.2s;
         }
 
-        .btn:hover { background-color: #f9fafb; border-color: #d1d5db; }
-        .btn:active { background-color: #f3f4f6; }
+        .btn:hover { background-color: #f1f5f9; border-color: #cbd5e1; }
+        .btn:active { background-color: #e2e8f0; }
         .btn.primary { background-color: var(--primary); color: white; border-color: var(--primary); }
         .btn.primary:hover { background-color: var(--primary-hover); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .separator { width: 1px; height: 24px; background-color: var(--border-color); margin: 0 5px; }
 
-        /* Workspace */
+        /* Workspace & Grid Background */
         .workspace { display: flex; flex: 1; overflow: hidden; position: relative; }
-        .viewport { flex: 1; position: relative; overflow: hidden; background-color: var(--bg-color); cursor: grab; }
+        
+        .viewport { 
+            flex: 1; 
+            position: relative; 
+            overflow: hidden; 
+            background-color: var(--bg-color); 
+            /* Sfondo a griglia tratteggiata per allineamento */
+            background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+            cursor: grab; 
+        }
         .viewport:active { cursor: grabbing; }
 
         #canvas {
@@ -84,11 +93,13 @@
         #nodes-layer { z-index: 2; }
 
         /* Edges */
-        .edge-path { pointer-events: stroke; cursor: pointer; transition: stroke-width 0.2s; }
-        .edge-path:hover { stroke-width: 5px; }
+        .edge-hitbox { pointer-events: stroke; cursor: pointer; }
+        .edge-path { transition: stroke-width 0.2s; }
+        /* Quando si è in hover sull'hitbox (il parent g), evidenziamo il path figlio visibile */
+        .edge-group:hover .edge-path { stroke-width: 5px; }
         .edge-path.selected { stroke: var(--primary) !important; stroke-width: 4px; filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.5)); }
 
-        /* Nodes - Nuova Struttura per supportare clip-path e connettori */
+        /* Nodes */
         .node-wrapper {
             position: absolute;
             pointer-events: auto;
@@ -104,43 +115,21 @@
 
         .node-wrapper:active { cursor: grabbing; }
         
-        /* Evidenziazione selezione sul wrapper */
         .node-wrapper.selected::after {
-            content: '';
-            position: absolute;
-            inset: -8px;
-            border: 2px dashed var(--primary);
-            border-radius: 8px;
-            pointer-events: none;
-            z-index: 30;
+            content: ''; position: absolute; inset: -8px; border: 2px dashed var(--primary); border-radius: 8px; pointer-events: none; z-index: 30;
         }
 
         .shape-bg {
-            position: absolute;
-            inset: 0;
-            z-index: -1;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: box-shadow 0.2s;
+            position: absolute; inset: 0; z-index: -1; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: box-shadow 0.2s;
         }
 
-        .node-wrapper.selected .shape-bg {
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        }
+        .node-wrapper.selected .shape-bg { box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
 
         .node-content {
-            position: relative;
-            z-index: 10;
-            outline: none;
-            text-align: center;
-            width: 100%;
-            cursor: text;
-            min-height: 1.5em;
-            word-wrap: break-word;
-            user-select: text;
-            -webkit-user-select: text;
+            position: relative; z-index: 10; outline: none; text-align: center; width: 100%; cursor: text; min-height: 1.5em; word-wrap: break-word; user-select: text; -webkit-user-select: text;
         }
 
-        /* Formattazioni specifiche per le forme (Padding e Clip-paths) */
+        /* Shapes Clip-paths */
         .node-wrapper[data-shape="rect"] .shape-bg { border-radius: 8px; }
         .node-wrapper[data-shape="rect"] .node-content { padding: 15px; }
 
@@ -163,40 +152,17 @@
         .node-wrapper[data-shape="text"].selected .shape-bg { border: 1px dashed var(--primary); }
         .node-wrapper[data-shape="text"] .node-content { padding: 10px; }
 
-        /* Stato "Editing" per il testo */
-        .node-wrapper.editing {
-            user-select: text !important;
-            -webkit-user-select: text !important;
-            z-index: 50;
-        }
-        .node-wrapper.editing .node-content {
-            cursor: text;
-            pointer-events: auto;
-        }
-        .node-wrapper.editing .shape-bg {
-            box-shadow: 0 0 0 3px var(--primary), 0 4px 15px rgba(0,0,0,0.2) !important;
-        }
+        /* Editing State */
+        .node-wrapper.editing { user-select: text !important; -webkit-user-select: text !important; z-index: 50; }
+        .node-wrapper.editing .node-content { cursor: text; pointer-events: auto; }
+        .node-wrapper.editing .shape-bg { box-shadow: 0 0 0 3px var(--primary), 0 4px 15px rgba(0,0,0,0.2) !important; }
 
-        /* Handle per connessione visuale (Ora fuori dal clip-path) */
+        /* Handle */
         .connect-handle {
-            position: absolute;
-            right: -15px;
-            bottom: -15px;
-            width: 26px;
-            height: 26px;
-            background-color: var(--primary);
-            color: white;
-            border-radius: 50%;
+            position: absolute; right: -15px; bottom: -15px; width: 26px; height: 26px; background-color: var(--primary); color: white; border-radius: 50%; display: none; align-items: center; justify-content: center; cursor: crosshair; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 40; font-size: 18px; font-weight: bold; pointer-events: auto; transition: transform 0.1s;
+        }
+        .node-wrapper.selected:not(.editing) .connect-handle {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: crosshair;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            z-index: 40;
-            font-size: 18px;
-            font-weight: bold;
-            pointer-events: auto;
-            transition: transform 0.1s;
         }
         .connect-handle:hover { transform: scale(1.15); background-color: var(--primary-hover); }
 
@@ -207,7 +173,7 @@
         
         .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .tool-btn { display: flex; flex-direction: column; align-items: center; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; cursor: pointer; color: var(--text-main); font-size: 12px; gap: 5px;}
-        .tool-btn:hover { border-color: var(--primary); background-color: #eff6ff; }
+        .tool-btn:hover { border-color: var(--primary); background-color: #f1f5f9; }
         .tool-btn.active { border-color: var(--primary); background-color: #eff6ff; box-shadow: inset 0 0 0 1px var(--primary); }
         .tool-icon { font-size: 18px; }
 
@@ -218,37 +184,24 @@
         
         input[type="color"] { width: 36px; height: 36px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; }
         input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-        input[type="color"]::-webkit-color-swatch { border: none; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
         select, input[type="number"] { padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px; width: 100%; }
 
-        .hint-text { font-size: 12px; color: var(--text-muted); margin-top: 10px; text-align: center; padding: 10px; background: #f9fafb; border-radius: 6px; }
+        .hint-text { font-size: 12px; color: var(--text-muted); margin-top: 10px; text-align: center; padding: 10px; background: #f8fafc; border-radius: 6px; line-height: 1.5; }
 
-        /* RICH TEXT EDITOR FLOATING TOOLBAR */
-        #floating-toolbar {
-            position: absolute;
-            background: #fff;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            padding: 5px;
-            display: none;
-            gap: 5px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            pointer-events: auto;
-        }
-        .rt-btn {
-            background: none; border: none; padding: 6px 10px; cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 14px;
-        }
-        .rt-btn:hover { background: #f3f4f6; color: var(--primary); }
-        .rt-color-picker { width: 24px; height: 24px; padding: 0; border: none; cursor: pointer; border-radius: 4px; overflow: hidden; margin-top: 2px;}
+        /* Stili per i bottoni di formattazione testo nel pannello */
+        .rt-btn { background: #fff; border: 1px solid var(--border-color); padding: 6px 12px; cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 14px; transition: 0.2s; }
+        .rt-btn:hover { background: #f1f5f9; border-color: var(--primary); color: var(--primary); }
+        .rt-color-picker { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border-color); cursor: pointer; border-radius: 4px; overflow: hidden; }
 
     </style>
 </head>
 <body>
 
     <div class="toolbar">
-        <button class="btn" onclick="undo()" id="btn-undo" disabled>↺ Annulla</button>
-        <button class="btn" onclick="redo()" id="btn-redo" disabled>↻ Ripristina</button>
+        <button class="btn" onclick="undo()" id="btn-undo" title="Ctrl+Z" disabled>↺ Annulla</button>
+        <button class="btn" onclick="redo()" id="btn-redo" title="Ctrl+Y" disabled>↻ Ripristina</button>
+        <span id="autosave-status" style="font-size: 12px; color: #10b981; font-weight: bold; margin-left: 5px; min-width: 80px;"></span>
         <div class="separator"></div>
         <button class="btn" onclick="document.getElementById('import-file').click()">📥 Importa</button>
         <input type="file" id="import-file" style="display: none" accept=".json" onchange="importMap(event)">
@@ -260,30 +213,14 @@
         <button class="btn" onclick="zoomIn()">➕</button>
         <button class="btn" onclick="resetZoom()">🔄</button>
         <div class="separator"></div>
-        <button class="btn" onclick="deleteSelected()" style="color: #dc2626; border-color: #fca5a5;">🗑️ Elimina</button>
-    </div>
-
-    <!-- Toolbar Editor Testo (Appare al doppio click) -->
-    <div id="floating-toolbar">
-        <button class="rt-btn" onmousedown="formatText(event, 'bold')" title="Grassetto">B</button>
-        <button class="rt-btn" onmousedown="formatText(event, 'italic')" style="font-style: italic" title="Corsivo">I</button>
-        <button class="rt-btn" onmousedown="formatText(event, 'underline')" style="text-decoration: underline" title="Sottolineato">U</button>
-        <div class="separator" style="height: 20px; margin: 4px;"></div>
-        <input type="color" class="rt-color-picker" id="rt-color" oninput="formatTextColor(event)" onchange="formatTextColor(event)" title="Colore Testo Selezionato">
+        <button class="btn" onclick="deleteSelected()" title="Canc o Backspace" style="color: #dc2626; border-color: #fca5a5;">🗑️ Elimina</button>
     </div>
 
     <div class="workspace">
         <div class="viewport" id="viewport">
             <div id="canvas">
                 <svg id="edges-layer">
-                    <defs>
-                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#4b5563" />
-                        </marker>
-                        <marker id="arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
-                        </marker>
-                    </defs>
+                    <!-- I marcatori (frecce) ora vengono generati dinamicamente in base ai colori usati -->
                 </svg>
                 <div id="nodes-layer"></div>
             </div>
@@ -319,7 +256,8 @@
                     </button>
                 </div>
                 <div class="hint-text" id="tool-hint">
-                    Seleziona un nodo per il <strong style="color:var(--primary)">pallino (+)</strong>. <strong>Doppio clic</strong> per formattare il testo.
+                    Usa <strong style="color:var(--primary)">+</strong> per connettere. <strong>Doppio clic</strong> per il testo.<br>
+                    Trascina per spostare. Allineamento automatico (Snap).
                 </div>
             </div>
 
@@ -330,7 +268,19 @@
                     <div class="prop-group" style="background: #eff6ff; padding: 10px; border-radius: 8px; border: 1px dashed #3b82f6; text-align: center;">
                         <label style="color: #1d4ed8; margin-bottom: 8px; display: block;">Modifica Testo</label>
                         <button class="btn primary" onclick="editSelectedNodeText()" style="width: 100%; justify-content: center;">✏️ Modifica Ora</button>
-                        <div style="font-size: 11px; color: #3b82f6; margin-top: 6px;">(Puoi anche fare <b>doppio clic</b> sull'elemento)</div>
+                        <div style="font-size: 11px; color: #3b82f6; margin-top: 6px;">(Oppure <b>doppio clic</b> sull'elemento)</div>
+                    </div>
+
+                    <div class="prop-group" style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <label style="margin-bottom: 8px; display: block; color: var(--text-main);">Stile Testo Selezionato</label>
+                        <div style="display: flex; gap: 5px; align-items: center;">
+                            <button class="rt-btn" onmousedown="formatText(event, 'bold')" title="Grassetto">B</button>
+                            <button class="rt-btn" onmousedown="formatText(event, 'italic')" style="font-style: italic" title="Corsivo">I</button>
+                            <button class="rt-btn" onmousedown="formatText(event, 'underline')" style="text-decoration: underline" title="Sottolineato">U</button>
+                            <div class="separator" style="height: 20px; margin: 0 4px;"></div>
+                            <input type="color" class="rt-color-picker" id="rt-color" onmousedown="saveSelection()" oninput="formatTextColor(event)" onchange="formatTextColor(event)" title="Colore Testo Evidenziato">
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Seleziona una parte di testo per applicare lo stile.</div>
                     </div>
 
                     <div class="prop-group">
@@ -361,6 +311,14 @@
                 </div>
 
                 <div id="edge-props" style="display: none;">
+                    <div class="prop-group" style="background: #eff6ff; padding: 10px; border-radius: 8px; border: 1px dashed #3b82f6; text-align: center;">
+                        <label style="color: #1d4ed8; margin-bottom: 8px; display: block;">Azioni Linea</label>
+                        <div style="display: flex; gap: 8px; justify-content: center;">
+                            <button class="btn" onclick="reverseSelectedEdge()" style="flex: 1; justify-content: center; font-size: 12px; padding: 6px;" title="Inverti direzione della freccia">⇄ Inverti</button>
+                            <button class="btn" onclick="deleteSelected()" style="flex: 1; justify-content: center; font-size: 12px; padding: 6px; color: #dc2626; border-color: #fca5a5;" title="Elimina questa linea">🗑️ Elimina</button>
+                        </div>
+                    </div>
+                    
                     <div class="prop-group">
                         <label>Colore Linea</label>
                         <input type="color" id="prop-edge-color" oninput="updateEdgeProp('color', this.value)">
@@ -386,7 +344,7 @@
         let currentTool = 'select';
         let selectedNodeId = null;
         let selectedEdgeId = null;
-        let editingNodeId = null; // Nodo attualmente in modifica testo
+        let editingNodeId = null; 
 
         let isDraggingNode = false;
         let dragTarget = null;
@@ -412,21 +370,37 @@
         const propsPanel = document.getElementById('properties-panel');
         const nodeProps = document.getElementById('node-props');
         const edgeProps = document.getElementById('edge-props');
-        const floatingToolbar = document.getElementById('floating-toolbar');
 
         function init() {
             const rect = viewport.getBoundingClientRect();
             view.x = rect.width / 2; view.y = rect.height / 2;
+            
+            // Recupera la mappa autosalvata in locale al caricamento della pagina
+            try {
+                const savedMap = localStorage.getItem('mappa_autosalvataggio');
+                if (savedMap) {
+                    const parsed = JSON.parse(savedMap);
+                    if (parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+                        state = parsed;
+                    }
+                }
+            } catch(e) { console.warn("Nessun autosalvataggio trovato o errore di lettura", e); }
+
             applyViewTransform();
             saveHistory();
             render();
         }
 
-        // --- VIEWPORT ---
+        // --- VIEWPORT E GRIGLIA ---
         function applyViewTransform() {
             canvas.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`;
             document.getElementById('zoom-level').textContent = Math.round(view.zoom * 100) + '%';
+            
+            // Allinea la griglia di sfondo visivamente
+            viewport.style.backgroundPosition = `${view.x}px ${view.y}px`;
+            viewport.style.backgroundSize = `${20 * view.zoom}px ${20 * view.zoom}px`;
         }
+        
         function setZoom(newZoom) {
             const oldZoom = view.zoom;
             view.zoom = Math.max(0.1, Math.min(3.0, newZoom));
@@ -434,7 +408,6 @@
             view.x = (rect.width/2) - ((rect.width/2) - view.x) * (view.zoom / oldZoom);
             view.y = (rect.height/2) - ((rect.height/2) - view.y) * (view.zoom / oldZoom);
             applyViewTransform();
-            hideFloatingToolbar();
         }
         function zoomIn() { setZoom(view.zoom * 1.2); }
         function zoomOut() { setZoom(view.zoom / 1.2); }
@@ -450,7 +423,6 @@
             view.x = mouseX - (mouseX - view.x) * (view.zoom / oldZoom);
             view.y = mouseY - (mouseY - view.y) * (view.zoom / oldZoom);
             applyViewTransform();
-            hideFloatingToolbar();
         }, { passive: false });
 
         // --- HISTORY & AUTOSAVE ---
@@ -461,15 +433,24 @@
             history.push(currentState);
             historyIndex++;
             updateHistoryButtons();
+            
+            // Autosalvataggio invisibile nel browser
+            localStorage.setItem('mappa_autosalvataggio', currentState);
         }
 
-        // Funzione per il salvataggio automatico debounced (ritardato di 0.25s)
         let autoSaveTimeout = null;
         function autoSaveHistory() {
             if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
-            autoSaveTimeout = setTimeout(() => {
-                saveHistory();
-            }, 250); // 0.25 secondi
+            
+            const statusEl = document.getElementById('autosave-status');
+            if(statusEl) statusEl.innerHTML = "⏳ Salvataggio...";
+
+            // Attende esattamente 0.3 secondi dall'ultima azione per salvare
+            autoSaveTimeout = setTimeout(() => { 
+                saveHistory(); 
+                if(statusEl) statusEl.innerHTML = "✅ Salvato";
+                setTimeout(() => { if(statusEl && statusEl.innerHTML === "✅ Salvato") statusEl.innerHTML = ""; }, 2000);
+            }, 300); 
         }
 
         function undo() { if (historyIndex > 0) { historyIndex--; restoreState(); } }
@@ -484,9 +465,7 @@
                 clearSelection();
                 render();
                 updateHistoryButtons();
-            } catch (err) {
-                console.error("Errore nel ripristino dello stato", err);
-            }
+            } catch (err) { console.error("Errore ripristino", err); }
         }
         
         function updateHistoryButtons() {
@@ -508,19 +487,19 @@
             reader.onload = (ev) => {
                 try { 
                     const parsedState = JSON.parse(ev.target.result); 
-                    // Controllo rigoroso della struttura importata
-                    if (parsedState && Array.isArray(parsedState.nodes) && Array.isArray(parsedState.edges)) {
+                    // Validazione più rigorosa: controlliamo anche la presenza di id, x e y
+                    const validNodes = parsedState.nodes && Array.isArray(parsedState.nodes) && parsedState.nodes.every(n => n.id && n.x !== undefined && n.y !== undefined);
+                    
+                    if (parsedState && validNodes && Array.isArray(parsedState.edges)) {
                         state = parsedState; 
                         clearSelection(); 
                         saveHistory(); 
                         render(); 
                     } else {
-                        alert("Il file importato non è una mappa valida o è corrotto.");
+                        alert("Il file importato non è una mappa valida o manca di attributi fondamentali.");
                     }
                 }
-                catch(err) { 
-                    alert("Formato file JSON non valido."); 
-                }
+                catch(err) { alert("Formato file JSON non valido."); }
             };
             reader.readAsText(file); 
             e.target.value = '';
@@ -531,7 +510,7 @@
             const btn = document.querySelector('button[onclick="saveAsImage()"]');
             const origTxt = btn.innerHTML; btn.innerHTML = "⏳ Creazione..."; btn.disabled = true;
             
-            clearSelection(); hideFloatingToolbar();
+            clearSelection();
             
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             state.nodes.forEach(n => {
@@ -551,12 +530,9 @@
             render(); await new Promise(r => setTimeout(r, 150));
 
             try {
-                // Utilizza htmlToImage che supporta perfettamente i clip-path
                 const dataUrl = await htmlToImage.toPng(canvas, { 
-                    backgroundColor: getComputedStyle(document.body).getPropertyValue('--bg-color').trim() || '#f3f4f6', 
-                    pixelRatio: 2, 
-                    width: w, 
-                    height: h 
+                    backgroundColor: getComputedStyle(document.body).getPropertyValue('--bg-color').trim() || '#f8fafc', 
+                    pixelRatio: 2, width: w, height: h 
                 });
                 const a = document.createElement('a'); a.download = 'mappa.png'; a.href = dataUrl; a.click();
             } catch(e) { console.error(e); alert("Errore salvataggio."); } 
@@ -568,23 +544,50 @@
             }
         }
 
-        // --- STRUMENTI ---
+        // --- STRUMENTI E SELEZIONE ---
         function setTool(tool) {
             currentTool = tool;
             document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
             canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
             clearSelection();
-            hideFloatingToolbar();
         }
 
         function clearSelection() {
             selectedNodeId = null; selectedEdgeId = null;
             if(editingNodeId) stopTextEdit(editingNodeId);
-            render(); updatePropertiesPanel();
+            document.querySelectorAll('.node-wrapper').forEach(el => el.classList.remove('selected'));
+            renderEdges(); // Aggiorna le linee per rimuovere la classe selected
+            updatePropertiesPanel();
+        }
+
+        // Selezione delle linee ora formalizzata in una funzione dedicata
+        function selectEdge(edgeId, e) {
+            if (e) e.stopPropagation();
+            if (currentTool === 'select') {
+                if (editingNodeId) stopTextEdit(editingNodeId);
+                selectedEdgeId = edgeId;
+                selectedNodeId = null;
+                document.querySelectorAll('.node-wrapper').forEach(el => el.classList.remove('selected'));
+                renderEdges();
+                updatePropertiesPanel();
+            }
+        }
+
+        function reverseSelectedEdge() {
+            if (!selectedEdgeId || !state || !Array.isArray(state.edges)) return;
+            const edge = state.edges.find(e => e.id === selectedEdgeId);
+            if (edge) {
+                // Scambia sorgente e destinazione
+                const temp = edge.source;
+                edge.source = edge.target;
+                edge.target = temp;
+                saveHistory();
+                render();
+            }
         }
 
         function deleteSelected() {
-            if (!state || !Array.isArray(state.nodes)) return; // Controllo di sicurezza
+            if (!state || !Array.isArray(state.nodes)) return;
             if (selectedNodeId) {
                 state.nodes = state.nodes.filter(n => n.id !== selectedNodeId);
                 state.edges = state.edges.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId);
@@ -593,18 +596,27 @@
                 state.edges = state.edges.filter(e => e.id !== selectedEdgeId);
                 selectedEdgeId = null; saveHistory(); render(); updatePropertiesPanel();
             }
-            hideFloatingToolbar();
         }
 
+        // Aggiunti comandi da tastiera (Ctrl+Z, Ctrl+Y, Delete)
         window.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.closest('[contenteditable="true"]')) return;
-            if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault(); deleteSelected();
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { 
+                e.preventDefault(); 
+                if (e.shiftKey) redo(); else undo(); 
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { 
+                e.preventDefault(); redo(); 
+            }
         });
 
         // --- PROPRIETA' ---
         function updatePropertiesPanel() {
-            if (!state || !Array.isArray(state.nodes)) return; // Controllo di sicurezza
-            if (selectedNodeId && !editingNodeId) {
+            if (!state || !Array.isArray(state.nodes)) return; 
+            if (selectedNodeId) { // Corretto per mantenere aperto il pannello durante il text editing
                 propsPanel.style.display = 'block'; nodeProps.style.display = 'block'; edgeProps.style.display = 'none';
                 const node = state.nodes.find(n => n.id === selectedNodeId);
                 if (!node) return;
@@ -629,20 +641,33 @@
         function updateNodeProp(prop, value) {
             if (!selectedNodeId || !state || !Array.isArray(state.nodes)) return;
             const node = state.nodes.find(n => n.id === selectedNodeId);
-            if (node) {
-                node[prop] = value;
-                render();
-                autoSaveHistory(); // Salva automaticamente dopo 0.25s
+            if (node) { 
+                node[prop] = value; 
+                
+                // Aggiornamento DOM visivo e rapido (NON distrugge la selezione del testo!)
+                const nodeEl = document.getElementById(node.id);
+                if (nodeEl) {
+                    const bg = nodeEl.querySelector('.shape-bg');
+                    const content = nodeEl.querySelector('.node-content');
+                    if (prop === 'bgColor') bg.style.backgroundColor = value;
+                    if (prop === 'textColor') content.style.color = value;
+                    if (prop === 'borderColor') bg.style.borderColor = value;
+                    if (prop === 'borderWidth') bg.style.borderWidth = value + 'px';
+                    if (prop === 'borderStyle') bg.style.borderStyle = value;
+                    if (prop === 'fontSize') content.style.fontSize = value + 'px';
+                }
+                
+                autoSaveHistory(); 
             }
         }
         
         function updateEdgeProp(prop, value) {
             if (!selectedEdgeId || !state || !Array.isArray(state.edges)) return;
             const edge = state.edges.find(e => e.id === selectedEdgeId);
-            if (edge) {
-                edge[prop] = value;
-                render();
-                autoSaveHistory(); // Salva automaticamente dopo 0.25s
+            if (edge) { 
+                edge[prop] = value; 
+                renderEdges(); // Linee non impattano l'editing testuale
+                autoSaveHistory(); 
             }
         }
         
@@ -659,22 +684,26 @@
         }
 
         viewport.addEventListener('mousedown', (e) => {
-            if (e.target.closest('#floating-toolbar') || e.target.closest('[contenteditable="true"]')) return;
-            
+            if (e.target.closest('[contenteditable="true"]')) return;
             if (editingNodeId) stopTextEdit(editingNodeId);
 
             const pos = getMousePos(e);
-            if (['viewport', 'canvas', 'edges-layer', 'nodes-layer'].includes(e.target.id)) {
+            if (['viewport', 'canvas', 'edges-layer', 'nodes-layer'].includes(e.target.id) || e.target.tagName.toLowerCase() === 'svg') {
                 if (currentTool === 'select') {
                     clearSelection(); isPanning = true; startPanX = e.clientX - view.x; startPanY = e.clientY - view.y;
                 } else {
                     const htmlContent = currentTool === 'text' ? '<i>Testo libero...</i>' : '<b>Nuovo Concetto</b>';
+                    
+                    // Snap iniziale all'inserimento
+                    const startX = Math.round((pos.x - 50) / 10) * 10;
+                    const startY = Math.round((pos.y - 25) / 10) * 10;
+
                     const newNode = {
                         id: 'node_' + Date.now(), type: currentTool,
-                        x: pos.x - 50, y: pos.y - 25,
+                        x: startX, y: startY,
                         html: htmlContent,
                         bgColor: DEFAULT_COLORS[currentTool] || '#ffffff',
-                        textColor: '#1f2937', borderColor: currentTool === 'text' ? 'transparent' : '#000000',
+                        textColor: '#1e293b', borderColor: currentTool === 'text' ? 'transparent' : '#0f172a',
                         borderWidth: currentTool === 'text' ? 0 : 2, borderStyle: 'solid',
                         fontSize: 16
                     };
@@ -688,39 +717,44 @@
             if (e.target.closest('[contenteditable="true"]') || e.target.classList.contains('connect-handle')) return;
             e.stopPropagation();
             if (editingNodeId && editingNodeId !== nodeId) stopTextEdit(editingNodeId);
-            hideFloatingToolbar();
 
             if (currentTool === 'select') {
                 const wasSelected = (selectedNodeId === nodeId);
                 selectedNodeId = nodeId; 
                 selectedEdgeId = null;
                 isDraggingNode = true;
+                
                 if (state && Array.isArray(state.nodes)) {
-                    dragTarget = state.nodes.find(n => n.id === nodeId);
-                    if (dragTarget) {
-                        const pos = getMousePos(e);
-                        dragOffsetX = pos.x - dragTarget.x; 
-                        dragOffsetY = pos.y - dragTarget.y;
+                    // Dinamic Z-Index: Porta in primo piano modificando direttamente il DOM senza re-renderizzare
+                    const nodeIndex = state.nodes.findIndex(n => n.id === nodeId);
+                    if (nodeIndex > -1 && nodeIndex !== state.nodes.length - 1) {
+                        const nodeToFront = state.nodes.splice(nodeIndex, 1)[0];
+                        state.nodes.push(nodeToFront);
+                        const nodeEl = document.getElementById(nodeId);
+                        if (nodeEl) nodeEl.parentNode.appendChild(nodeEl);
                     }
+                    dragTarget = state.nodes[state.nodes.length - 1];
+                    const pos = getMousePos(e);
+                    dragOffsetX = pos.x - dragTarget.x; 
+                    dragOffsetY = pos.y - dragTarget.y;
                 }
                 
-                // Ridisegna la mappa SOLO se stiamo cliccando su un nuovo nodo
-                // Evita di distruggere il nodo durante un doppio clic!
                 if (!wasSelected) {
-                    render(); 
+                    document.querySelectorAll('.node-wrapper').forEach(el => el.classList.remove('selected'));
+                    const el = document.getElementById(nodeId);
+                    if (el) el.classList.add('selected');
+                    renderEdges(); 
                     updatePropertiesPanel();
                 }
             }
         }
 
-        // --- RICH TEXT EDITOR (In-place) ---
+        // --- RICH TEXT EDITOR ---
         let savedSelection = null;
 
         function saveSelection() {
             const sel = window.getSelection();
-            if (sel.getRangeAt && sel.rangeCount) {
-                savedSelection = sel.getRangeAt(0);
-            }
+            if (sel.getRangeAt && sel.rangeCount) { savedSelection = sel.getRangeAt(0); }
         }
 
         function restoreSelection() {
@@ -731,29 +765,25 @@
             }
         }
 
-        // Salvataggio automatico in tempo reale (ad ogni keystroke, chiama autosave con ritardo 0.25s)
         function updateNodeHtmlRealtime() {
             if (editingNodeId && state && Array.isArray(state.nodes)) {
                 const nodeEl = document.getElementById(editingNodeId);
                 if (nodeEl) {
                     const contentDiv = nodeEl.querySelector('.node-content');
                     const node = state.nodes.find(n => n.id === editingNodeId);
-                    if (node) {
-                        node.html = contentDiv.innerHTML;
-                        autoSaveHistory(); // Invia il salvataggio automatico dopo 0.25 secondi di inattività
-                    }
+                    if (node) { node.html = contentDiv.innerHTML; autoSaveHistory(); }
                 }
             }
         }
 
-        function editSelectedNodeText() {
-            if (selectedNodeId) startTextEdit(null, selectedNodeId);
-        }
+        function editSelectedNodeText() { if (selectedNodeId) startTextEdit(null, selectedNodeId); }
 
         function startTextEdit(e, nodeId) {
             if (e) e.stopPropagation();
             if (currentTool !== 'select') return;
             
+            isDraggingNode = false; // Blocca eventuali spostamenti accidentali del mouse durante il doppio click
+
             editingNodeId = nodeId;
             const nodeEl = document.getElementById(nodeId);
             if (!nodeEl) return;
@@ -762,30 +792,17 @@
             
             contentDiv.contentEditable = "true";
             
-            // Eventi per salvare costantemente la selezione e auto-salvare
             contentDiv.addEventListener('keyup', saveSelection);
             contentDiv.addEventListener('mouseup', saveSelection);
             contentDiv.addEventListener('mouseleave', saveSelection);
-            contentDiv.addEventListener('input', () => {
-                saveSelection();
-                updateNodeHtmlRealtime();
-            });
+            contentDiv.addEventListener('input', () => { saveSelection(); updateNodeHtmlRealtime(); });
             
-            // Timeout minimo per assicurare che il browser applichi contenteditable prima di forzare il focus
             setTimeout(() => {
                 contentDiv.focus();
-                
-                // Seleziona tutto il testo inizialmente
-                const range = document.createRange();
-                range.selectNodeContents(contentDiv);
-                const sel = window.getSelection(); 
-                sel.removeAllRanges(); 
-                sel.addRange(range);
-                
-                saveSelection(); // Salva la selezione iniziale
+                const range = document.createRange(); range.selectNodeContents(contentDiv);
+                const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+                saveSelection();
             }, 10);
-
-            positionFloatingToolbar(nodeEl);
         }
 
         function stopTextEdit(nodeId) {
@@ -798,49 +815,36 @@
             
             if (state && Array.isArray(state.nodes)) {
                 const node = state.nodes.find(n => n.id === nodeId);
-                if (node) {
-                    node.html = contentDiv.innerHTML;
-                    saveHistory(); // Salva in modo definitivo la chiusura dell'edit
-                }
+                if (node) { node.html = contentDiv.innerHTML; saveHistory(); }
             }
             
-            editingNodeId = null;
-            hideFloatingToolbar();
-            window.getSelection().removeAllRanges();
-            render();
+            editingNodeId = null; window.getSelection().removeAllRanges(); 
+            // Non richiamiamo render() per proteggere lo stato della selezione DOM
         }
 
-        function positionFloatingToolbar(nodeEl) {
-            floatingToolbar.style.display = 'flex';
-            const rect = nodeEl.getBoundingClientRect();
-            // Posiziona sopra il nodo, considerando viewport e pan
-            floatingToolbar.style.left = rect.left + 'px';
-            floatingToolbar.style.top = (rect.top - 45) + 'px';
-        }
-
-        function hideFloatingToolbar() {
-            floatingToolbar.style.display = 'none';
-        }
-
-        // Comandi Formattazione
         function formatText(e, command) {
-            e.preventDefault(); // Previene la perdita del focus!
-            restoreSelection(); // Recupera le parole che avevi evidenziato
-            document.execCommand(command, false, null);
-            updateNodeHtmlRealtime();
-            saveSelection();
+            e.preventDefault(); restoreSelection(); document.execCommand(command, false, null);
+            updateNodeHtmlRealtime(); saveSelection();
         }
 
         function formatTextColor(e) {
-            restoreSelection(); // Recupera le parole che avevi evidenziato
-            document.execCommand('foreColor', false, e.target.value);
-            updateNodeHtmlRealtime();
-            saveSelection();
-            
-            // Riporta il focus all'editor
+            restoreSelection(); document.execCommand('foreColor', false, e.target.value);
+            updateNodeHtmlRealtime(); saveSelection();
             if(editingNodeId) {
                  const editingEl = document.getElementById(editingNodeId);
                  if (editingEl) editingEl.querySelector('.node-content').focus();
+            }
+        }
+
+        // --- CALCOLO PERCORSO CURVO (BEZIER) ---
+        function getPathData(p1, p2) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            // Calcola una curva S morbida che asseconda la direzione prevalente
+            if (Math.abs(dx) > Math.abs(dy)) {
+                return `M ${p1.x} ${p1.y} C ${p1.x + dx/2} ${p1.y}, ${p2.x - dx/2} ${p2.y}, ${p2.x} ${p2.y}`;
+            } else {
+                return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + dy/2}, ${p2.x} ${p2.y - dy/2}, ${p2.x} ${p2.y}`;
             }
         }
 
@@ -848,40 +852,50 @@
         function startConnecting(e, nodeId) {
             if (!state || !Array.isArray(state.nodes)) return;
             isConnecting = true; connectionStartNodeId = nodeId;
-            const pos = getMousePos(e);
-            const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            tempLine.id = 'temp-connection-line';
-            tempLine.setAttribute('stroke', '#3b82f6'); tempLine.setAttribute('stroke-width', '3'); tempLine.setAttribute('stroke-dasharray', '5,5'); tempLine.setAttribute('marker-end', 'url(#arrowhead-selected)');
             
-            const nodeEl = document.getElementById(nodeId);
-            const sn = state.nodes.find(n => n.id === nodeId);
-            if (sn && nodeEl) {
-                tempLine.setAttribute('x1', sn.x + nodeEl.offsetWidth/2); tempLine.setAttribute('y1', sn.y + nodeEl.offsetHeight/2);
-                tempLine.setAttribute('x2', pos.x); tempLine.setAttribute('y2', pos.y);
-                edgesLayer.appendChild(tempLine);
-            }
+            // Usiamo path invece di line per supportare le curve durante il trascinamento
+            const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            tempPath.id = 'temp-connection-line';
+            tempPath.setAttribute('fill', 'none'); tempPath.setAttribute('stroke', '#3b82f6'); 
+            tempPath.setAttribute('stroke-width', '3'); tempPath.setAttribute('stroke-dasharray', '5,5'); 
+            
+            // Marker base per linea temporanea
+            tempPath.setAttribute('marker-end', 'url(#arrowhead-3b82f6)');
+            
+            edgesLayer.appendChild(tempPath);
         }
 
         window.addEventListener('mousemove', (e) => {
             if (isPanning) {
                 view.x = e.clientX - startPanX; view.y = e.clientY - startPanY; applyViewTransform();
-                if(editingNodeId) {
-                    const el = document.getElementById(editingNodeId);
-                    if (el) positionFloatingToolbar(el);
-                }
                 return;
             }
             const pos = getMousePos(e);
             if (isDraggingNode && dragTarget) {
-                dragTarget.x = pos.x - dragOffsetX; dragTarget.y = pos.y - dragOffsetY; render();
-                if(editingNodeId === dragTarget.id) {
-                    const el = document.getElementById(dragTarget.id);
-                    if (el) positionFloatingToolbar(el);
+                // Snap-to-Grid: arrodonda alle decine più vicine
+                let newX = pos.x - dragOffsetX;
+                let newY = pos.y - dragOffsetY;
+                dragTarget.x = Math.round(newX / 10) * 10; 
+                dragTarget.y = Math.round(newY / 10) * 10;
+                
+                // Aggiorna solo visivamente la posizione DOM senza distruggere i nodi con un intero render()
+                const nodeEl = document.getElementById(dragTarget.id);
+                if (nodeEl) {
+                    nodeEl.style.left = dragTarget.x + 'px';
+                    nodeEl.style.top = dragTarget.y + 'px';
                 }
+                renderEdges(); // Aggiorniamo solo le linee in modo fluido
             }
             if (isConnecting) {
                 const tl = document.getElementById('temp-connection-line');
-                if (tl) { tl.setAttribute('x2', pos.x); tl.setAttribute('y2', pos.y); }
+                if (tl) { 
+                    const nodeEl = document.getElementById(connectionStartNodeId);
+                    const sn = state.nodes.find(n => n.id === connectionStartNodeId);
+                    if (sn && nodeEl) {
+                        const startPoint = { x: sn.x + nodeEl.offsetWidth/2, y: sn.y + nodeEl.offsetHeight/2 };
+                        tl.setAttribute('d', getPathData(startPoint, pos));
+                    }
+                }
             }
         });
 
@@ -907,8 +921,6 @@
 
         function renderNodes() {
             nodesLayer.innerHTML = '';
-            
-            // Controllo rigoroso per evitare il TypeError (Cannot read properties of undefined (reading 'forEach'))
             if (!state || !Array.isArray(state.nodes)) return; 
             
             state.nodes.forEach(node => {
@@ -919,19 +931,15 @@
                 wrapper.style.left = node.x + 'px';
                 wrapper.style.top = node.y + 'px';
 
-                // Background/Bordi che subiscono il clip-path o border-radius
                 const bg = document.createElement('div');
                 bg.className = 'shape-bg';
                 bg.style.backgroundColor = node.bgColor;
                 bg.style.border = `${node.borderWidth ?? 2}px ${node.borderStyle || 'solid'} ${node.borderColor || 'transparent'}`;
 
-                // Contenuto Testuale Rich Text
                 const content = document.createElement('div');
                 content.className = 'node-content';
                 content.style.color = node.textColor;
                 content.style.fontSize = (node.fontSize || 16) + 'px';
-                
-                // Supporto per vecchi salvataggi (testo semplice) convertiti al volo in html
                 content.innerHTML = node.html || (node.text ? node.text.replace(/\n/g, '<br>') : '');
                 
                 if(editingNodeId === node.id) {
@@ -945,50 +953,47 @@
                 wrapper.appendChild(bg);
                 wrapper.appendChild(content);
 
-                // Handle Connessione ESTERNO al clip-path
-                if (selectedNodeId === node.id && !editingNodeId) {
-                    const handle = document.createElement('div');
-                    handle.className = 'connect-handle';
-                    handle.innerHTML = '+';
-                    handle.addEventListener('mousedown', (e) => { e.stopPropagation(); startConnecting(e, node.id); });
-                    wrapper.appendChild(handle);
-                }
+                // Aggiunta dinamica dell'handle gestita ora tramite regole CSS
+                const handle = document.createElement('div');
+                handle.className = 'connect-handle';
+                handle.innerHTML = '+';
+                handle.addEventListener('mousedown', (e) => { e.stopPropagation(); startConnecting(e, node.id); });
+                wrapper.appendChild(handle);
 
                 nodesLayer.appendChild(wrapper);
             });
         }
 
-        // Calcolo perimetro per disegnare le frecce outside del div
         function getPerimeterPoint(fromX, fromY, toX, toY, width, height, shape, padding) {
             const dx = toX - fromX; const dy = toY - fromY; const dist = Math.sqrt(dx*dx + dy*dy);
             if (dist === 0) return { x: toX, y: toY };
             let dt = 0;
             
-            // Logica semplificata: per forme convesse complessa (esagono, parallelogramma, rombo) 
-            // usiamo un'approssimazione radiale al bounding box o cerchio per evitare che la freccia entri
-            if (shape === 'circle' || shape === 'hexagon') {
-                dt = ((width/2) + padding) / dist;
-            } else if (shape === 'diamond' || shape === 'parallelogram') {
+            if (shape === 'circle' || shape === 'hexagon') { dt = ((width/2) + padding) / dist; } 
+            else if (shape === 'diamond' || shape === 'parallelogram') {
                 dt = 1 / (Math.abs(dx)/(width/2) + Math.abs(dy)/(height/2));
                 dt += padding / dist;
             } else {
-                // Rettangoli e capsule
                 const tx = dx !== 0 ? (width/2)/Math.abs(dx) : Infinity;
                 const ty = dy !== 0 ? (height/2)/Math.abs(dy) : Infinity;
-                dt = Math.min(tx, ty);
-                dt += padding / dist;
+                dt = Math.min(tx, ty); dt += padding / dist;
             }
             dt = Math.min(dt, 0.95);
             return { x: toX - dx*dt, y: toY - dy*dt };
         }
 
         function renderEdges() {
-            // Controllo rigoroso prima di manipolare edges
-            if (!state || !Array.isArray(state.edges)) {
-                edgesLayer.innerHTML = '';
-                return;
-            }
+            if (!state || !Array.isArray(state.edges)) { edgesLayer.innerHTML = ''; return; }
             
+            // Raccogli tutti i colori unici usati dalle linee per generare le frecce del colore giusto
+            const uniqueColors = new Set(state.edges.map(e => e.color || '#4b5563'));
+            uniqueColors.add('#3b82f6'); // Aggiungi sempre il colore di selezione
+            
+            const defsHtml = Array.from(uniqueColors).map(color => {
+                const cleanColorId = color.replace('#', '');
+                return `<marker id="arrowhead-${cleanColorId}" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${color}" /></marker>`;
+            }).join('');
+
             const edgesSvgHtml = state.edges.map(edge => {
                 const srcEl = document.getElementById(edge.source);
                 const tgtEl = document.getElementById(edge.target);
@@ -996,7 +1001,6 @@
 
                 const sn = state.nodes.find(n => n.id === edge.source);
                 const tn = state.nodes.find(n => n.id === edge.target);
-                
                 if (!sn || !tn) return '';
 
                 const cx1 = sn.x + srcEl.offsetWidth/2; const cy1 = sn.y + srcEl.offsetHeight/2;
@@ -1006,30 +1010,28 @@
                 const p2 = getPerimeterPoint(cx1, cy1, cx2, cy2, tgtEl.offsetWidth, tgtEl.offsetHeight, tn.type, 15);
 
                 const isSel = selectedEdgeId === edge.id;
-                const stroke = isSel ? '#3b82f6' : edge.color;
+                const baseColor = edge.color || '#4b5563';
+                const stroke = isSel ? '#3b82f6' : baseColor;
+                const markerId = `arrowhead-${stroke.replace('#', '')}`;
                 const dash = edge.type === 'dashed' ? 'stroke-dasharray="8,8"' : '';
-                const marker = isSel ? 'url(#arrowhead-selected)' : 'url(#arrowhead)';
+                
+                // Percorso di Bezier calcolato dinamicamente
+                const pathData = getPathData(p1, p2);
 
-                return `<line id="svg_${edge.id}" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" 
-                        class="edge-path ${isSel?'selected':''}" stroke="${stroke}" stroke-width="3" ${dash} 
-                        marker-end="${marker}" onclick="selectEdge('${edge.id}', event)"/>`;
+                // Utilizziamo un gruppo <g> per creare un Hitbox:
+                // 1. Una linea trasparente spessa 15px (cattura i click facilmente)
+                // 2. La linea colorata vera e propria
+                return `
+                    <g class="edge-group" onmousedown="selectEdge('${edge.id}', event)">
+                        <path d="${pathData}" fill="none" class="edge-hitbox" stroke="transparent" stroke-width="15" />
+                        <path id="svg_${edge.id}" d="${pathData}" fill="none" 
+                              class="edge-path ${isSel?'selected':''}" stroke="${stroke}" stroke-width="3" ${dash} 
+                              marker-end="url(#${markerId})" style="pointer-events: none;" />
+                    </g>
+                `;
             }).join('');
             
-            edgesLayer.innerHTML = `
-                <defs>
-                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#4b5563" /></marker>
-                    <marker id="arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" /></marker>
-                </defs>
-                ${edgesSvgHtml}
-            `;
-            
-            // Re-attach listeners manually on SVG elements
-            state.edges.forEach(edge => {
-                const el = document.getElementById('svg_' + edge.id);
-                if(el) el.addEventListener('mousedown', (e) => {
-                    e.stopPropagation(); if(currentTool === 'select') { selectedEdgeId = edge.id; selectedNodeId = null; render(); updatePropertiesPanel(); }
-                });
-            });
+            edgesLayer.innerHTML = `<defs>${defsHtml}</defs>${edgesSvgHtml}`;
         }
 
         window.onload = init;

@@ -160,6 +160,11 @@
         .node-wrapper {
             position: absolute; pointer-events: auto; cursor: grab; display: flex;
             align-items: center; justify-content: center; min-width: 40px; min-height: 40px;
+            /* FIX: senza width:max-content, un box assoluto con solo "left" impostato si
+               ridimensiona (shrink-to-fit) in base allo spazio residuo verso il bordo destro
+               del canvas anziché in base al contenuto: un testo lungo andava a capo carattere
+               per carattere invece di allargarsi fino a max-width. */
+            width: max-content;
             user-select: none; -webkit-user-select: none;
         }
         .node-wrapper:active { cursor: grabbing; }
@@ -185,7 +190,12 @@
             word-wrap: break-word; user-select: text;
             overflow-y: auto; overflow-x: hidden; /* Scroll fluido se supera i limiti massimi */
             caret-color: var(--text-main);
-            display: flex; align-items: center; justify-content: center;
+            /* FIX: in contenteditable, il tasto Invio crea un <div> per ogni riga/paragrafo.
+               Con la direzione di default (row) questi <div> diventavano elementi flex
+               affiancati in orizzontale invece di andare a capo uno sotto l'altro: il testo
+               "andava a capo" solo visivamente dentro ogni singolo div, ma il blocco non si
+               adattava perché il layout complessivo restava una riga. */
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
 
         /* Scrollbar sottile per i contenuti dei blocchi */

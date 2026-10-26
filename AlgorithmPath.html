@@ -547,22 +547,27 @@ window.AP = window.AP || {};
   AP.clone = function (o) { return JSON.parse(JSON.stringify(o)); };
 
   // ---- Tipi ----
-  AP.TYPES = ['int', 'real', 'bool', 'str'];
+  AP.TYPES = ['int', 'long', 'real', 'double', 'bool', 'str', 'char'];
   AP.typeName = function (t, plural) {
     var m = {
-      int: AP.tr('Intero', 'Integer'), real: AP.tr('Reale', 'Real'),
-      bool: AP.tr('Booleano', 'Boolean'), str: AP.tr('Stringa', 'String'), none: AP.tr('Nessuno', 'None')
+      int: AP.tr('Intero', 'Integer'), long: 'Long', real: 'Float', double: 'Double',
+      bool: AP.tr('Booleano', 'Boolean'), str: AP.tr('Stringa', 'String'), char: AP.tr('Carattere (char)', 'Character (char)'), none: AP.tr('Nessuno', 'None')
     };
     return m[t] || m.none;
   };
 
   // ---- Valori ----
   // scalare: {t, v}  (v === null => non inizializzato)   array: {t, arr:[valori]}
+  // tipi: int (32 bit), long (64 bit, BigInt), real = float (32 bit), double, bool, str, char
+  AP.NUMT = { int: 1, long: 2, real: 3, double: 4 };
   AP.V = {
     int: function (n) { return { t: 'int', v: Math.trunc(n) }; },
-    real: function (n) { return { t: 'real', v: n }; },
+    long: function (n) { return { t: 'long', v: typeof n === 'bigint' ? n : BigInt(Math.trunc(n)) }; },
+    real: function (n) { return { t: 'real', v: Math.fround(n) }; },
+    double: function (n) { return { t: 'double', v: n }; },
     bool: function (b) { return { t: 'bool', v: !!b }; },
     str: function (s) { return { t: 'str', v: String(s) }; },
+    char: function (s) { return { t: 'char', v: String(s) }; },
     none: function (t) { return { t: t, v: null }; },
     array: function (t, n) {
       var a = [];
@@ -571,8 +576,9 @@ window.AP = window.AP || {};
     }
   };
   AP.isArr = function (x) { return !!x && x.arr !== undefined; };
-  AP.isNum = function (x) { return !AP.isArr(x) && (x.t === 'int' || x.t === 'real') && x.v !== null; };
-  AP.isStr = function (x) { return !AP.isArr(x) && x.t === 'str' && x.v !== null; };
+  AP.isNum = function (x) { return !AP.isArr(x) && !!AP.NUMT[x.t] && x.v !== null; };
+  AP.isIntegral = function (x) { return !AP.isArr(x) && (x.t === 'int' || x.t === 'long') && x.v !== null; };
+  AP.isStr = function (x) { return !AP.isArr(x) && (x.t === 'str' || x.t === 'char') && x.v !== null; };
   AP.isBool = function (x) { return !AP.isArr(x) && x.t === 'bool' && x.v !== null; };
   AP.valType = function (x) {
     if (!x) return AP.tr('Nessuno', 'None');
@@ -580,14 +586,14 @@ window.AP = window.AP || {};
     return AP.isArr(x) ? n + AP.tr(' (array)', ' array') : n;
   };
 
-  // Formattazione dei reali in stile .NET (15 cifre significative)
-  AP.fmtReal = function (n) {
+  // Formattazione in stile .NET: 'prec' cifre significative (7 per float, 15 per double)
+  function fmtSig(n, prec) {
     if (Number.isNaN(n)) return 'NaN';
     if (!isFinite(n)) return n > 0 ? 'Infinity' : '-Infinity';
     if (n === 0) return '0';
-    var p = Number(n.toPrecision(15));
+    var p = Number(n.toPrecision(prec));
     var a = Math.abs(p);
-    if (a >= 1e15 || a < 1e-5) {
+    if (a >= Math.pow(10, prec) || a < 1e-5) {
       var s = p.toExponential().split('e');
       var sign = s[1][0];
       var d = s[1].slice(1);
@@ -595,7 +601,9 @@ window.AP = window.AP || {};
       return s[0] + 'E' + sign + d;
     }
     return String(p);
-  };
+  }
+  AP.fmtReal = function (n) { return fmtSig(n, 15); };
+  AP.fmtFloat = function (n) { return fmtSig(n, 7); };
 
   AP.valText = function (x) {
     if (!x) return '';
@@ -604,7 +612,9 @@ window.AP = window.AP || {};
     switch (x.t) {
       case 'bool': return x.v ? 'true' : 'false';
       case 'int': return String(Math.trunc(x.v));
-      case 'real': return AP.fmtReal(x.v);
+      case 'long': return x.v.toString();
+      case 'real': return AP.fmtFloat(x.v);
+      case 'double': return AP.fmtReal(x.v);
       default: return String(x.v);
     }
   };
@@ -691,6 +701,22 @@ window.AP = window.AP || {};
         else toks.push({ k: 'id', v: w });
         continue;
       }
+      if (c === "'") {
+        var cj = i + 1, ch;
+        if (text[cj] === '\\') {
+          var esc = { n: '\n', t: '\t', r: '\r', '0': '\0', '\\': '\\', "'": "'" }[text[cj + 1]];
+          if (esc === undefined) throw new ParseError(tr('Carattere di escape non valido', 'Invalid escape character'));
+          ch = esc; cj += 2;
+        } else {
+          var cp = text.codePointAt(cj);
+          if (cp === undefined || text[cj] === "'") throw new ParseError(tr("Un carattere va scritto tra apici: 'a'", "A character is written between quotes: 'a'"));
+          ch = String.fromCodePoint(cp); cj += ch.length;
+        }
+        if (text[cj] !== "'") throw new ParseError(tr("Il carattere deve essere uno solo: 'a'", "A character literal holds exactly one character: 'a'"));
+        toks.push({ k: 'chr', v: ch });
+        i = cj + 1;
+        continue;
+      }
       if (c === '"') {
         var j2 = i + 1;
         while (j2 < n && text[j2] !== '"' && text[j2] !== '\n') j2++;
@@ -727,7 +753,7 @@ window.AP = window.AP || {};
     function unexpected() {
       var t = toks[i];
       if (!t) return new ParseError(tr('Espressione incompleta', 'Incomplete expression'));
-      var txt = t.k === 'str' ? '"' + t.v + '"' : (t.w || t.v);
+      var txt = t.k === 'str' ? '"' + t.v + '"' : t.k === 'chr' ? "'" + t.v + "'" : (t.w || t.v);
       return new ParseError(tr('Elemento inatteso: ', 'Unexpected item: ') + txt);
     }
     function bin(op, l, r) { return { k: 'bin', op: op, l: l, r: r, hasCall: l.hasCall || r.hasCall }; }
@@ -742,7 +768,13 @@ window.AP = window.AP || {};
       }
       return l;
     }
-    function parseCat() { var l = parseAdd(); while (isOp('&')) { i++; l = bin('&', l, parseAdd()); } return l; }
+    // l'operatore & è facoltativo: "ciao " nome "!" equivale a "ciao " & nome & "!"
+    function startsOperand() { var t = peek(); return !!t && (t.k === 'str' || t.k === 'chr' || t.k === 'num' || t.k === 'id' || t.k === '('); }
+    function parseCat() {
+      var l = parseAdd();
+      while (isOp('&') || startsOperand()) { if (isOp('&')) i++; l = bin('&', l, parseAdd()); }
+      return l;
+    }
     function parseAdd() {
       var l = parseMul();
       for (;;) {
@@ -771,9 +803,13 @@ window.AP = window.AP || {};
       if (!t) throw unexpected();
       if (t.k === 'num') {
         i++;
-        return { k: 'lit', val: t.v.indexOf('.') >= 0 ? AP.V.real(parseFloat(t.v)) : AP.V.int(parseInt(t.v, 10)), hasCall: false };
+        if (t.v.indexOf('.') >= 0) return { k: 'lit', val: AP.V.double(parseFloat(t.v)), hasCall: false };
+        var big = BigInt(t.v);
+        if (big > 9223372036854775807n) throw new ParseError(tr('Numero troppo grande: ', 'Number too large: ') + t.v);
+        return { k: 'lit', val: big <= 2147483647n ? AP.V.int(Number(big)) : AP.V.long(big), hasCall: false };
       }
       if (t.k === 'str') { i++; return { k: 'lit', val: AP.V.str(t.v), hasCall: false }; }
+      if (t.k === 'chr') { i++; return { k: 'lit', val: AP.V.char(t.v), hasCall: false }; }
       if (t.k === '(') {
         i++;
         var e = parseOr();
@@ -1322,6 +1358,12 @@ window.AP = window.AP || {};
   var tr = AP.tr, V = AP.V, M = AP.model;
 
   // ---------- operatori ----------
+  var RANK = AP.NUMT;
+  var I64MIN = -(1n << 63n), I64MAX = (1n << 63n) - 1n;
+  function N(x) { return Number(x.v); }
+  function bigOf(x) { return typeof x.v === 'bigint' ? x.v : BigInt(x.v); }
+  function wider(l, r) { return RANK[l.t] >= RANK[r.t] ? l.t : r.t; }
+  function mk(t, x) { return t === 'int' ? V.int(x) : t === 'long' ? V.long(x) : t === 'real' ? V.real(x) : V.double(x); }
   function typeErr(opName, l, r) {
     return AP.err('Operazione "' + opName + '" non valida tra ' + AP.valType(l) + ' e ' + AP.valType(r),
       'Operation "' + opName + '" is not valid between ' + AP.valType(l) + ' and ' + AP.valType(r));
@@ -1332,48 +1374,70 @@ window.AP = window.AP || {};
   function overflow(action, text) {
     return AP.err('Overflow nell\'operazione ' + action + ': ' + text, 'Overflow in ' + action + ': ' + text);
   }
-  function num(n, bothInt, action, text) {
-    if (!isFinite(n)) throw overflow(action, text);
-    if (bothInt) {
-      if (Math.abs(n) > 9.223372036854776e18) throw overflow(action, text);
-      return V.int(n);
-    }
-    return V.real(n);
+  function fitInt(b, action, text) {
+    if (b < -2147483648n || b > 2147483647n) throw overflow(action, text + AP.tr('  (supera i limiti di int: usa long)', '  (outside the int range: use long)'));
+    return Number(b);
   }
+  function fitLong(b, action, text) {
+    if (b < I64MIN || b > I64MAX) throw overflow(action, text + AP.tr('  (supera i limiti di long)', '  (outside the long range)'));
+    return b;
+  }
+  function cmpNum(a, b) {
+    if (AP.isIntegral(a) && AP.isIntegral(b)) { var x = bigOf(a), y = bigOf(b); return x < y ? -1 : x > y ? 1 : 0; }
+    var p = N(a), q = N(b);
+    return p < q ? -1 : p > q ? 1 : 0;
+  }
+  function cmpText(a, b) { return a.v < b.v ? -1 : a.v > b.v ? 1 : 0; }
 
   function binop(op, l, r) {
-    var bothInt, a, b;
+    var t, x, txt;
     switch (op) {
       case '+': case '-': case '*':
         if (!AP.isNum(l) || !AP.isNum(r)) throw typeErr(op === '+' ? tr('Somma', 'Add') : op === '-' ? tr('Sottrazione', 'Subtract') : tr('Moltiplicazione', 'Multiply'), l, r);
-        a = l.v; b = r.v; bothInt = l.t === 'int' && r.t === 'int';
-        return num(op === '+' ? a + b : op === '-' ? a - b : a * b, bothInt, op === '+' ? '+' : op === '-' ? '-' : '*', a + ' ' + op + ' ' + b);
+        t = wider(l, r);
+        txt = AP.valText(l) + ' ' + op + ' ' + AP.valText(r);
+        if (t === 'int' || t === 'long') {
+          var a = bigOf(l), b = bigOf(r), z = op === '+' ? a + b : op === '-' ? a - b : a * b;
+          return t === 'int' ? V.int(fitInt(z, op, txt)) : V.long(fitLong(z, op, txt));
+        }
+        x = op === '+' ? N(l) + N(r) : op === '-' ? N(l) - N(r) : N(l) * N(r);
+        if (!isFinite(x)) throw overflow(op, txt);
+        return mk(t, x);
       case '/':
         if (!AP.isNum(l) || !AP.isNum(r)) throw typeErr(tr('Divisione', 'Divide'), l, r);
-        if (r.v === 0) throw AP.err('Divisione per zero: ' + AP.valText(l) + ' / 0', 'Division by zero: ' + AP.valText(l) + ' / 0');
-        return num(l.v / r.v, false, '/', l.v + ' / ' + r.v);
+        if (N(r) === 0) throw AP.err('Divisione per zero: ' + AP.valText(l) + ' / 0', 'Division by zero: ' + AP.valText(l) + ' / 0');
+        t = wider(l, r);
+        if (t === 'int' || t === 'long') t = 'double';
+        x = N(l) / N(r);
+        if (!isFinite(x)) throw overflow('/', AP.valText(l) + ' / ' + AP.valText(r));
+        return mk(t, x);
       case '%':
         if (!AP.isNum(l) || !AP.isNum(r)) throw typeErr(tr('Modulo', 'Modulus'), l, r);
-        if (r.v === 0) throw AP.err('Modulo per zero: ' + AP.valText(l) + ' mod 0', 'Modulus by zero: ' + AP.valText(l) + ' mod 0');
-        if (l.v < 0 || r.v < 0) throw AP.err('Il modulo richiede valori non negativi (trovato ' + (l.v < 0 ? l.v : r.v) + ')', 'Modulus needs non-negative values (found ' + (l.v < 0 ? l.v : r.v) + ')');
-        return num(l.v % r.v, l.t === 'int' && r.t === 'int', '%', l.v + ' % ' + r.v);
+        if (N(r) === 0) throw AP.err('Modulo per zero: ' + AP.valText(l) + ' mod 0', 'Modulus by zero: ' + AP.valText(l) + ' mod 0');
+        if (N(l) < 0 || N(r) < 0) throw AP.err('Il modulo richiede valori non negativi (trovato ' + AP.valText(N(l) < 0 ? l : r) + ')', 'Modulus needs non-negative values (found ' + AP.valText(N(l) < 0 ? l : r) + ')');
+        t = wider(l, r);
+        if (t === 'int') return V.int(Number(bigOf(l) % bigOf(r)));
+        if (t === 'long') return V.long(bigOf(l) % bigOf(r));
+        return mk(t, N(l) % N(r));
       case '^':
         if (!AP.isNum(l) || !AP.isNum(r)) throw typeErr(tr('Potenza', 'Exponent'), l, r);
-        return num(Math.pow(l.v, r.v), false, '^', l.v + ' ^ ' + r.v);
+        x = Math.pow(N(l), N(r));
+        if (!isFinite(x)) throw overflow('^', AP.valText(l) + ' ^ ' + AP.valText(r));
+        return V.double(x);
       case 'and': case 'or':
         if (!AP.isBool(l) || !AP.isBool(r)) throw typeErr(op === 'and' ? 'And' : 'Or', l, r);
         return V.bool(op === 'and' ? (l.v && r.v) : (l.v || r.v));
       case '=': case '!=':
         var eq;
-        if (AP.isNum(l) && AP.isNum(r)) eq = l.v === r.v;
+        if (AP.isNum(l) && AP.isNum(r)) eq = cmpNum(l, r) === 0;
         else if (AP.isStr(l) && AP.isStr(r)) eq = l.v === r.v;
         else if (AP.isBool(l) && AP.isBool(r)) eq = l.v === r.v;
         else throw typeErr(op === '=' ? tr('Uguale', 'Equal') : tr('Diverso', 'Not equal'), l, r);
         return V.bool(op === '=' ? eq : !eq);
       case '<': case '>': case '<=': case '>=':
         var c;
-        if (AP.isNum(l) && AP.isNum(r)) c = l.v < r.v ? -1 : l.v > r.v ? 1 : 0;
-        else if (AP.isStr(l) && AP.isStr(r)) c = l.v < r.v ? -1 : l.v > r.v ? 1 : 0;
+        if (AP.isNum(l) && AP.isNum(r)) c = cmpNum(l, r);
+        else if (AP.isStr(l) && AP.isStr(r)) c = cmpText(l, r);
         else throw typeErr(tr('Confronto', 'Comparison') + ' ' + op, l, r);
         return V.bool(op === '<' ? c < 0 : op === '>' ? c > 0 : op === '<=' ? c <= 0 : c >= 0);
       case '&':
@@ -1386,7 +1450,9 @@ window.AP = window.AP || {};
   function unop(op, x) {
     if (op === 'neg') {
       if (!AP.isNum(x)) throw AP.err('Impossibile negare un valore di tipo ' + AP.valType(x), 'Cannot negate a value of type ' + AP.valType(x));
-      return x.t === 'int' ? V.int(-x.v) : V.real(-x.v);
+      if (x.t === 'int') return V.int(fitInt(-bigOf(x), 'neg', '-' + AP.valText(x)));
+      if (x.t === 'long') return V.long(fitLong(-x.v, 'neg', '-' + AP.valText(x)));
+      return mk(x.t, -x.v);
     }
     if (!AP.isBool(x)) throw AP.err('"Not" richiede un valore booleano (trovato ' + AP.valType(x) + ')', '"Not" needs a Boolean value (found ' + AP.valType(x) + ')');
     return V.bool(!x.v);
@@ -1400,17 +1466,29 @@ window.AP = window.AP || {};
     };
     if (AP.isArr(src)) throw bad();
     if (src.v === null) throw AP.err('Il valore assegnato a "' + name + '" non è inizializzato', 'The value assigned to "' + name + '" is not initialized');
+    var x;
     switch (t) {
       case 'bool': if (src.t === 'bool') return V.bool(src.v); break;
       case 'int':
-        if (src.t === 'int') return V.int(src.v);
-        if (src.t === 'real') {
-          if (!(src.v >= -9.223372036854776e18 && src.v <= 9.223372036854776e18)) throw overflow('Assign', name + ' = ' + AP.valText(src));
-          return V.int(src.v);
+        if (AP.isIntegral(src)) return V.int(fitInt(bigOf(src), 'Assign', name + ' = ' + AP.valText(src)));
+        if (AP.isNum(src)) {
+          x = Math.trunc(N(src));
+          if (!(x >= -2147483648 && x <= 2147483647)) throw overflow('Assign', name + ' = ' + AP.valText(src) + AP.tr('  (supera i limiti di int)', '  (outside the int range)'));
+          return V.int(x);
         }
         break;
-      case 'real': if (src.t === 'int' || src.t === 'real') return V.real(src.v); break;
-      case 'str': if (src.t === 'str') return V.str(src.v); break;
+      case 'long':
+        if (AP.isIntegral(src)) return V.long(bigOf(src));
+        if (AP.isNum(src)) {
+          x = Math.trunc(N(src));
+          if (!(x >= -9.223372036854776e18 && x <= 9.223372036854775e18)) throw overflow('Assign', name + ' = ' + AP.valText(src));
+          return V.long(BigInt(x));
+        }
+        break;
+      case 'real': if (AP.isNum(src)) return V.real(N(src)); break;
+      case 'double': if (AP.isNum(src)) return V.double(N(src)); break;
+      case 'str': if (AP.isStr(src)) return V.str(src.v); break;
+      case 'char': if (AP.isStr(src) && Array.from(src.v).length === 1) return V.char(src.v); break;
     }
     throw bad();
   }
@@ -1433,7 +1511,7 @@ window.AP = window.AP || {};
   }
   function argNum(name, args, i) {
     if (!AP.isNum(args[i])) throw AP.err('Argomento ' + (i + 1) + ' di ' + name + ': richiesto un numero, trovato ' + AP.valType(args[i]), 'Argument ' + (i + 1) + ' of ' + name + ': a number is required, found ' + AP.valType(args[i]));
-    return args[i].v;
+    return Number(args[i].v);
   }
   function argStr(name, args, i) {
     if (!AP.isStr(args[i])) throw AP.err('Argomento ' + (i + 1) + ' di ' + name + ': richiesta una stringa, trovato ' + AP.valType(args[i]), 'Argument ' + (i + 1) + ' of ' + name + ': a string is required, found ' + AP.valType(args[i]));
@@ -1442,19 +1520,19 @@ window.AP = window.AP || {};
   function illegal(name, v) { return AP.err('Valore non valido per ' + name + ': ' + v, 'Invalid value for ' + name + ': ' + v); }
 
   var FN = {
-    abs: function (a) { argc('Abs', a, 1); var n = argNum('Abs', a, 0); return a[0].t === 'int' ? V.int(Math.abs(n)) : V.real(Math.abs(n)); },
-    sin: function (a) { argc('Sin', a, 1); return V.real(Math.sin(argNum('Sin', a, 0))); },
-    cos: function (a) { argc('Cos', a, 1); return V.real(Math.cos(argNum('Cos', a, 0))); },
-    tan: function (a) { argc('Tan', a, 1); return V.real(Math.tan(argNum('Tan', a, 0))); },
-    arcsin: function (a) { argc('ArcSin', a, 1); var n = argNum('ArcSin', a, 0); if (n < -1 || n > 1) throw illegal('ArcSin', n); return V.real(Math.asin(n)); },
-    arccos: function (a) { argc('ArcCos', a, 1); var n = argNum('ArcCos', a, 0); if (n < -1 || n > 1) throw illegal('ArcCos', n); return V.real(Math.acos(n)); },
-    arctan: function (a) { argc('ArcTan', a, 1); return V.real(Math.atan(argNum('ArcTan', a, 0))); },
-    int: function (a) { argc('Int', a, 1); return V.int(Math.trunc(argNum('Int', a, 0))); },
+    abs: function (a) { argc('Abs', a, 1); argNum('Abs', a, 0); var x = a[0]; return x.t === 'long' ? V.long(x.v < 0n ? -x.v : x.v) : mk(x.t, Math.abs(N(x))); },
+    sin: function (a) { argc('Sin', a, 1); return V.double(Math.sin(argNum('Sin', a, 0))); },
+    cos: function (a) { argc('Cos', a, 1); return V.double(Math.cos(argNum('Cos', a, 0))); },
+    tan: function (a) { argc('Tan', a, 1); return V.double(Math.tan(argNum('Tan', a, 0))); },
+    arcsin: function (a) { argc('ArcSin', a, 1); var n = argNum('ArcSin', a, 0); if (n < -1 || n > 1) throw illegal('ArcSin', n); return V.double(Math.asin(n)); },
+    arccos: function (a) { argc('ArcCos', a, 1); var n = argNum('ArcCos', a, 0); if (n < -1 || n > 1) throw illegal('ArcCos', n); return V.double(Math.acos(n)); },
+    arctan: function (a) { argc('ArcTan', a, 1); return V.double(Math.atan(argNum('ArcTan', a, 0))); },
+    int: function (a) { argc('Int', a, 1); var n = Math.trunc(argNum('Int', a, 0)); if (!(n >= -2147483648 && n <= 2147483647)) throw overflow('Int', String(n)); return V.int(n); },
     sgn: function (a) { argc('Sgn', a, 1); return V.int(Math.sign(argNum('Sgn', a, 0))); },
-    sqrt: function (a) { argc('Sqrt', a, 1); var n = argNum('Sqrt', a, 0); if (n < 0) throw illegal('Sqrt', n); return V.real(Math.sqrt(n)); },
-    log: function (a) { argc('Log', a, 1); var n = argNum('Log', a, 0); if (!(n > 0)) throw illegal('Log', n); return V.real(Math.log(n)); },
+    sqrt: function (a) { argc('Sqrt', a, 1); var n = argNum('Sqrt', a, 0); if (n < 0) throw illegal('Sqrt', n); return V.double(Math.sqrt(n)); },
+    log: function (a) { argc('Log', a, 1); var n = argNum('Log', a, 0); if (!(n > 0)) throw illegal('Log', n); return V.double(Math.log(n)); },
     ln: function (a) { return FN.log(a); },
-    log10: function (a) { argc('Log10', a, 1); var n = argNum('Log10', a, 0); if (!(n > 0)) throw illegal('Log10', n); return V.real(Math.log10(n)); },
+    log10: function (a) { argc('Log10', a, 1); var n = argNum('Log10', a, 0); if (!(n > 0)) throw illegal('Log10', n); return V.double(Math.log10(n)); },
     random: function (a) {
       argc('Random', a, 1); var n = argNum('Random', a, 0);
       if (n < 1 || n > 2147483647) throw illegal('Random', n);
@@ -1470,12 +1548,12 @@ window.AP = window.AP || {};
       argc('Char', a, 2); var s = argStr('Char', a, 0), i = Math.trunc(argNum('Char', a, 1));
       var chars = Array.from(s);
       if (i < 0 || i >= chars.length) throw illegal('Char', i);
-      return V.str(chars[i]);
+      return V.char(chars[i]);
     },
     tochar: function (a) {
       argc('ToChar', a, 1); var n = Math.trunc(argNum('ToChar', a, 0));
       if (n < 0 || n > 1114111) throw illegal('ToChar', n);
-      return V.str(String.fromCodePoint(n));
+      return V.char(String.fromCodePoint(n));
     },
     tocode: function (a) {
       argc('ToCode', a, 1); var s = argStr('ToCode', a, 0);
@@ -1487,12 +1565,14 @@ window.AP = window.AP || {};
     toreal: function (a) {
       argc('ToReal', a, 1); var s = argStr('ToReal', a, 0);
       if (!AP.canConvertReal(s)) throw illegal('ToReal', s);
-      return V.real(parseFloat(s));
+      return V.double(parseFloat(s));
     },
     tointeger: function (a) {
       argc('ToInteger', a, 1); var s = argStr('ToInteger', a, 0);
       if (!AP.canConvertReal(s)) throw illegal('ToInteger', s);
-      return V.int(parseFloat(s));
+      var n = Math.trunc(parseFloat(s));
+      if (!(n >= -2147483648 && n <= 2147483647)) throw overflow('ToInteger', s);
+      return V.int(n);
     },
     tofixed: function (a) {
       argc('ToFixed', a, 2); var n = argNum('ToFixed', a, 0), d = Math.trunc(argNum('ToFixed', a, 1));
@@ -1578,7 +1658,7 @@ window.AP = window.AP || {};
     }
     if (!AP.isArr(v.val)) throw AP.err('"' + ast.name + '" non è un array', '"' + ast.name + '" is not an array');
     if (!AP.isNum(idxVal)) throw AP.err('L\'indice di "' + ast.name + '" deve essere un numero (trovato ' + AP.valType(idxVal) + ')', 'The index of "' + ast.name + '" must be a number (found ' + AP.valType(idxVal) + ')');
-    var i = Math.trunc(idxVal.v);
+    var i = Math.trunc(N(idxVal));
     if (i < 0 || i >= v.val.arr.length) throw AP.err('Indice ' + i + ' fuori dai limiti di "' + ast.name + '" (massimo ' + (v.val.arr.length - 1) + ')', 'Index ' + i + ' is out of range for "' + ast.name + '" (max ' + (v.val.arr.length - 1) + ')');
     var el = v.val.arr[i];
     if (el.v === null) throw AP.err('L\'elemento ' + ast.name + '[' + i + '] non ha ancora un valore', 'Element ' + ast.name + '[' + i + '] has no value yet');
@@ -1586,9 +1666,9 @@ window.AP = window.AP || {};
   };
 
   Interp.prototype.constVal = function (ast) {
-    if (ast.name === 'pi') return V.real(Math.PI);
+    if (ast.name === 'pi') return V.double(Math.PI);
     if (ast.name === 'lf') return V.str('\n');
-    return V.real(Math.round(Date.now()) / 1000);
+    return V.double(Math.round(Date.now()) / 1000);
   };
 
   Interp.prototype.builtin = function (ast, args) {
@@ -1600,7 +1680,7 @@ window.AP = window.AP || {};
     if (l === 'turtlex' || l === 'turtley') {
       if (args.length) throw AP.err(ast.name + ' non richiede argomenti', ast.name + ' takes no arguments');
       var T = this.host.turtle;
-      return V.real(T ? (l === 'turtlex' ? T.x : T.y) : 0);
+      return V.double(T ? (l === 'turtlex' ? T.x : T.y) : 0);
     }
     for (var i = 0; i < args.length; i++) uninit(args[i], ast.name);
     return FN[l](args);
@@ -1756,7 +1836,7 @@ window.AP = window.AP || {};
       if (!AP.isArr(v.val)) throw AP.err('"' + t.name + '" non è un array', '"' + t.name + '" is not an array');
       var iv = await this.ev(t.idxText, env);
       if (!AP.isNum(iv)) throw AP.err('L\'indice di "' + t.name + '" deve essere un numero', 'The index of "' + t.name + '" must be a number');
-      var i = Math.trunc(iv.v);
+      var i = Math.trunc(N(iv));
       if (i < 0 || i >= v.val.arr.length) throw AP.err('Indice ' + i + ' fuori dai limiti di "' + t.name + '" (massimo ' + (v.val.arr.length - 1) + ')', 'Index ' + i + ' is out of range for "' + t.name + '" (max ' + (v.val.arr.length - 1) + ')');
       var cv = convertTo(v.val.t, val, t.name + '[' + i + ']');
       v.val.arr[i].v = cv.v;
@@ -1853,7 +1933,7 @@ window.AP = window.AP || {};
   Interp.prototype.doSleep = async function (s, env) {
     var v = await this.ev(s.secs, env);
     if (!AP.isNum(v) || v.v < 0) throw AP.err('Attendi: serve un numero di secondi non negativo (trovato ' + AP.valText(v) + ')', 'Wait: a non-negative number of seconds is needed (found ' + AP.valText(v) + ')');
-    var end = Date.now() + v.v * 1000;
+    var end = Date.now() + N(v) * 1000;
     while (!this.stopFlag) {
       var left = end - Date.now();
       if (left <= 0) break;
@@ -1872,7 +1952,7 @@ window.AP = window.AP || {};
       if (s.isArr) {
         var sz = await this.ev(s.size, env);
         if (!AP.isNum(sz) || sz.v < 0 || sz.v > 10000000) throw AP.err('Dimensione dell\'array non valida: ' + AP.valText(sz), 'Invalid array size: ' + AP.valText(sz));
-        val = V.array(s.vtype, Math.trunc(sz.v));
+        val = V.array(s.vtype, Math.trunc(N(sz)));
       } else {
         val = V.none(s.vtype);
       }
@@ -1889,17 +1969,29 @@ window.AP = window.AP || {};
   };
 
   Interp.prototype.parseInput = function (text, t) {
+    var raw = text;
     text = text.trim();
     switch (t) {
-      case 'int': if (!AP.canConvertReal(text)) return null; return V.int(parseFloat(text));
+      case 'int': case 'long':
+        if (!AP.canConvertReal(text)) return null;
+        if (/^[+-]?\d+$/.test(text)) {
+          var b = BigInt(text);
+          if (t === 'int') return b >= -2147483648n && b <= 2147483647n ? V.int(Number(b)) : null;
+          return b >= I64MIN && b <= I64MAX ? V.long(b) : null;
+        }
+        var x = Math.trunc(parseFloat(text));
+        if (t === 'int') return x >= -2147483648 && x <= 2147483647 ? V.int(x) : null;
+        return Math.abs(x) < 9.2e18 ? V.long(BigInt(x)) : null;
       case 'real': if (!AP.canConvertReal(text)) return null; return V.real(parseFloat(text));
+      case 'double': if (!AP.canConvertReal(text)) return null; return V.double(parseFloat(text));
       case 'bool':
         var l = text.toLowerCase();
         if (l === 'true' || l === 'vero') return V.bool(true);
         if (l === 'false' || l === 'falso') return V.bool(false);
         return null;
+      case 'char': return Array.from(raw).length === 1 ? V.char(raw) : null;
     }
-    return V.str(text);
+    return V.str(raw);
   };
 
   Interp.prototype.doInput = async function (s, env) {
@@ -1917,20 +2009,19 @@ window.AP = window.AP || {};
   };
 
   Interp.prototype.doFor = async function (s, env, entry) {
-    var self = this;
     var vr = this.lookup(env, s.v);
     var start = await this.ev(s.start, env), end = await this.ev(s.end, env), step = await this.ev(s.step, env);
     var names = [['Inizio', 'Start', start], ['Fine', 'End', end], ['Passo', 'Step', step]];
     names.forEach(function (n) { if (!AP.isNum(n[2])) throw AP.err('Per: il valore ' + n[0] + ' deve essere numerico (trovato ' + AP.valType(n[2]) + ')', 'For: the ' + n[1] + ' value must be numeric (found ' + AP.valType(n[2]) + ')'); });
-    if (step.v === 0) throw AP.err('Per: il passo non può essere zero', 'For: the step cannot be zero');
-    if (step.v < 0) throw AP.err('Per: il passo deve essere positivo (usa la direzione "decrescente")', 'For: the step must be positive (use the "decreasing" direction)');
+    if (N(step) === 0) throw AP.err('Per: il passo non può essere zero', 'For: the step cannot be zero');
+    if (N(step) < 0) throw AP.err('Per: il passo deve essere positivo (usa la direzione "decrescente")', 'For: the step must be positive (use the "decreasing" direction)');
     var dec = s.dir === 'dec';
-    var cur = start.v, ff = entry;
-    if (ff && AP.isNum(vr.val)) cur = vr.val.v;
+    var cur = N(start), lim = N(end), inc = N(step), ff = entry;
+    if (ff && AP.isNum(vr.val)) cur = N(vr.val);
     for (;;) {
       if (!ff) {
-        var more = dec ? cur >= end.v : cur <= end.v;
-        var cv = convertTo(vr.t, V.real(cur), s.v);
+        var more = dec ? cur >= lim : cur <= lim;
+        var cv = convertTo(vr.t, V.double(cur), s.v);
         vr.val.v = cv.v;
         if (!more) break;
       }
@@ -1938,8 +2029,8 @@ window.AP = window.AP || {};
       try { await this.execBlock(s.body, new Env(env), fe); }
       catch (e) { if (e instanceof AP.ContinueSig) { } else if (e instanceof AP.BreakSig) break; else throw e; }
       await this.tick(s, env);
-      cur = AP.isNum(vr.val) ? vr.val.v : cur;
-      cur = dec ? cur - step.v : cur + step.v;
+      cur = AP.isNum(vr.val) ? N(vr.val) : cur;
+      cur = dec ? cur - inc : cur + inc;
     }
   };
 
@@ -1953,7 +2044,7 @@ window.AP = window.AP || {};
     if (o.needIdx) {
       var iv = await this.ev(s.index, env);
       if (!AP.isNum(iv)) throw AP.err('L\'indice deve essere un numero', 'The index must be a number');
-      idx = Math.trunc(iv.v);
+      idx = Math.trunc(N(iv));
     }
     if (o.needVal) value = await this.ev(s.value, env);
     var store = async function (self, v) { await self.storeVar(s.target, v, env); };
@@ -1996,7 +2087,7 @@ window.AP = window.AP || {};
   };
 
   function compare(a, b) {
-    if (AP.isNum(a) && AP.isNum(b)) return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
+    if (AP.isNum(a) && AP.isNum(b)) return cmpNum(a, b);
     if (AP.isBool(a) && AP.isBool(b)) return a.v === b.v ? 0 : (a.v ? 1 : -1);
     var x = AP.valText(a), y = AP.valText(b);
     return x < y ? -1 : x > y ? 1 : 0;
@@ -2004,7 +2095,7 @@ window.AP = window.AP || {};
 
   function valuesMatch(a, b) {
     if (AP.isArr(a) || AP.isArr(b) || a.v === null || b.v === null) return false;
-    if (AP.isNum(a) && AP.isNum(b)) return a.v === b.v;
+    if (AP.isNum(a) && AP.isNum(b)) return cmpNum(a, b) === 0;
     if (AP.isBool(a) && AP.isBool(b)) return a.v === b.v;
     return AP.valText(a) === AP.valText(b);
   }
@@ -2060,7 +2151,7 @@ window.AP = window.AP || {};
         vals.push(AP.valText(v));
       } else {
         if (!AP.isNum(v)) throw AP.err('Tartaruga: il valore ' + (i + 1) + ' deve essere numerico (trovato ' + AP.valType(v) + ')', 'Turtle: value ' + (i + 1) + ' must be numeric (found ' + AP.valType(v) + ')');
-        vals.push(v.v);
+        vals.push(N(v));
       }
     }
     var p = T.exec(s.op, vals, !!s.flag, s);
@@ -3146,7 +3237,11 @@ window.AP = window.AP || {};
   Gen.prototype.sym = function (name) { return this.syms[lc(name)] || { name: this.safe(name), t: 'none', arr: false }; };
   Gen.prototype.fname = function (name) { var f = this.funcs[lc(name)]; return this.safe(f ? f.name : name); };
 
-  function numT(a, b) { return a === 'int' && b === 'int' ? 'int' : 'real'; }
+  var RK = { int: 1, long: 2, real: 3, double: 4 };
+  function numT(a, b) { return ['', 'int', 'long', 'real', 'double'][Math.max(RK[a] || 1, RK[b] || 1)]; }
+  function isFloat(t) { return t === 'real' || t === 'double'; }
+  function isIntegral(t) { return t === 'int' || t === 'long'; }
+  function chrEsc(v) { return "'" + ({ '\\': '\\\\', "'": "\\'", '\n': '\\n', '\t': '\\t', '\r': '\\r', '\0': '\\0' }[v] || v) + "'"; }
   function tOf(t) { return t === 'none' ? 'int' : t; }
 
   // ---- espressioni: restituiscono {s, p, t} ----
@@ -3155,18 +3250,32 @@ window.AP = window.AP || {};
     return (e.p < minP || (e.p === minP && (right || minP <= P.rel))) ? '(' + e.s + ')' : e.s;
   };
   Gen.prototype.toStr = function (e) {
-    if (e.t === 'str') return e;
-    if (e.t === 'real' && this.d.realStr) this.use('rs');
+    if (e.t === 'str' || (e.t === 'char' && !this.d.hasChar)) return e;
+    if (isFloat(e.t) && this.d.realStr) this.use('rs');
     return { s: this.d.toStr(e), p: P.atom, t: 'str' };
   };
   Gen.prototype.conv = function (e, to) {
-    if (to === 'int' && e.t === 'real') {
-      var r = this.d.toInt(this.wrap(e, P.atom));
-      return { s: r, p: /^\(int\) /.test(r) ? P.un : P.atom, t: 'int' };
+    var d = this.d, r;
+    if (to === 'int' || to === 'long') {
+      if (isFloat(e.t) || (to === 'int' && e.t === 'long')) {
+        r = d.toInt(this.wrap(e, P.atom), to);
+        return { s: r, p: /^\([a-z ]+\) /.test(r) ? P.un : P.atom, t: to };
+      }
+      return e;
     }
+    if (to === 'real' && e.t === 'double') {
+      if (e.lit && d.floatSuf) return { s: e.s + d.floatSuf, p: P.atom, t: 'real' };
+      if (d.toFloat) { r = d.toFloat(this.wrap(e, P.atom)); return { s: r, p: P.un, t: 'real' }; }
+      return e;
+    }
+    if (to === 'char' && e.t === 'str' && d.hasChar) {
+      if (e.chr !== undefined) return { s: d.charLit(e.chr), p: P.atom, t: 'char' };
+      return { s: d.strToChar(this.wrap(e, P.atom)), p: P.atom, t: 'char' };
+    }
+    if (to === 'str' && e.t === 'char' && d.hasChar) return this.toStr(e);
     return e;
   };
-  Gen.prototype.asInt = function (e) { return e.t === 'real' ? this.conv(e, 'int') : e; };
+  Gen.prototype.asInt = function (e) { return isFloat(e.t) || e.t === 'long' ? this.conv(e, 'int') : e; };
 
   Gen.prototype.ex = function (n) {
     var d = this.d, self = this, e;
@@ -3175,9 +3284,11 @@ window.AP = window.AP || {};
       case 'lit':
         switch (n.val.t) {
           case 'int': return { s: String(Math.trunc(n.val.v)), p: P.atom, t: 'int' };
-          case 'real': var rs = String(n.val.v); if (!/[.eE]/.test(rs)) rs += '.0'; return { s: rs, p: P.atom, t: 'real' };
+          case 'long': return { s: n.val.v.toString() + (d.longSuf || ''), p: P.atom, t: 'long' };
+          case 'real': case 'double': var rs = String(n.val.v); if (!/[.eE]/.test(rs)) rs += '.0'; return { s: rs, p: P.atom, t: 'double', lit: true };
           case 'bool': return { s: d.bool(n.val.v), p: P.atom, t: 'bool' };
-          default: return { s: d.str(n.val.v), p: P.atom, t: 'str' };
+          case 'char': return { s: d.hasChar ? d.charLit(n.val.v) : d.str(n.val.v), p: P.atom, t: 'char' };
+          default: return { s: d.str(n.val.v), p: P.atom, t: 'str', chr: Array.from(n.val.v).length === 1 ? n.val.v : undefined };
         }
       case 'var': {
         var sy = this.sym(n.name);
@@ -3206,6 +3317,10 @@ window.AP = window.AP || {};
 
   Gen.prototype.binary = function (n) {
     var d = this.d, l = this.ex(n.l), r = this.ex(n.r), op = n.op;
+    if (d.hasChar && ['=', '!=', '<', '>', '<=', '>='].indexOf(op) >= 0) {
+      if (l.t === 'char' && r.t === 'str') r = this.conv(r, 'char');
+      else if (l.t === 'str' && r.t === 'char') l = this.conv(l, 'char');
+    }
     var isStr = l.t === 'str' && r.t === 'str';
     switch (op) {
       case '+': case '-': case '*': {
@@ -3214,15 +3329,16 @@ window.AP = window.AP || {};
       }
       case '/': {
         var ls = this.cw(l, P.mul, false);
-        if (d.castReal && l.t === 'int' && r.t === 'int') ls = d.castReal + this.wrap(l, P.atom);
-        return { s: ls + ' / ' + this.cw(r, P.mul, true), p: P.mul, t: 'real' };
+        var dt = numT(l.t, r.t);
+        if (d.castReal && isIntegral(l.t) && isIntegral(r.t)) ls = d.castReal + this.wrap(l, P.atom);
+        return { s: ls + ' / ' + this.cw(r, P.mul, true), p: P.mul, t: isIntegral(dt) ? 'double' : dt };
       }
       case '%':
-        if ((l.t === 'real' || r.t === 'real') && d.fmod) { this.use('math'); return { s: d.fmod(l.s, r.s), p: P.atom, t: 'real' }; }
+        if ((isFloat(l.t) || isFloat(r.t)) && d.fmod) { this.use('math'); return { s: d.fmod(l.s, r.s), p: P.atom, t: numT(l.t, r.t) }; }
         return { s: this.cw(l, P.mul, false) + ' % ' + this.cw(r, P.mul, true), p: P.mul, t: numT(l.t, r.t) };
       case '^':
         if (!d.noMathPow) this.use('math');
-        return { s: d.pow(l.s, r.s, this.wrap(l, P.un), this.wrap(r, P.un)), p: d.powP || P.atom, t: 'real' };
+        return { s: d.pow(l.s, r.s, this.wrap(l, P.un), this.wrap(r, P.un)), p: d.powP || P.atom, t: 'double' };
       case '&': {
         var a = this.toStr(l), b = this.toStr(r);
         return { s: this.cw(a, P.add, false) + d.cat + this.cw(b, P.add, true), p: P.add, t: 'str' };
@@ -3238,12 +3354,13 @@ window.AP = window.AP || {};
     }
   };
 
-  var FN_TYPE = { abs: 'same', sqrt: 'real', sin: 'real', cos: 'real', tan: 'real', arcsin: 'real', arccos: 'real', arctan: 'real', log: 'real', ln: 'real', log10: 'real',
-    int: 'int', sgn: 'int', random: 'int', len: 'int', size: 'int', char: 'str', tostring: 'str', toreal: 'real', tointeger: 'int', tochar: 'str', tocode: 'int',
-    tofixed: 'str', pi: 'real', time: 'real', lf: 'str', eof: 'bool', turtlex: 'real', turtley: 'real' };
+  var FN_TYPE = { abs: 'same', sqrt: 'double', sin: 'double', cos: 'double', tan: 'double', arcsin: 'double', arccos: 'double', arctan: 'double', log: 'double', ln: 'double', log10: 'double',
+    int: 'int', sgn: 'int', random: 'int', len: 'int', size: 'int', char: 'char', tostring: 'str', toreal: 'double', tointeger: 'int', tochar: 'char', tocode: 'int',
+    tofixed: 'str', pi: 'double', time: 'double', lf: 'str', eof: 'bool', turtlex: 'double', turtley: 'double' };
   Gen.prototype.builtin = function (name, args) {
     var d = this.d, key = name === 'ln' ? 'log' : name, tpl = d.fn[key], self = this;
-    var t = FN_TYPE[name] === 'same' ? (args[0] ? args[0].t : 'real') : (FN_TYPE[name] || 'none');
+    if (d.hasChar && args[0] && args[0].t === 'char' && d.fnCh && d.fnCh[key]) tpl = d.fnCh[key];
+    var t = FN_TYPE[name] === 'same' ? (args[0] ? args[0].t : 'double') : (FN_TYPE[name] || 'none');
     if (key === 'tostring' && args[0]) return this.toStr(args[0]);
     if (!tpl) return { s: '0', p: P.atom, t: t };
     if (tpl[1]) tpl[1].split(' ').forEach(function (u) { self.use(u); });
@@ -3306,7 +3423,7 @@ window.AP = window.AP || {};
         var ex2 = parse(s.expr);
         if (M.check(s) || !ex2) return this.warn(s, 'incomplete output');
         var oe = this.ex(ex2);
-        if (oe.t === 'real' && d.realStr) oe = this.toStr(oe);
+        if (isFloat(oe.t) && d.realStr) oe = this.toStr(oe);
         return this.line(d.print(oe, !!s.nl), s.id, 'output');
       }
       case 'call': {
@@ -3560,22 +3677,22 @@ window.AP = window.AP || {};
     key: 'Python', name: 'Python', ext: 'py', cm: '#', semi: '', not: 'not ', and: 'and', or: 'or', eq: '==', ne: '!=', cat: ' + ', close: '', pass: 'pass',
     funcBase: 0, mainBase: 0, castReal: '', noMathPow: true,
     kw: ['and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'None', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield', 'True', 'False', 'print', 'input', 'str', 'int', 'float', 'len', 'range', 'list', 'math', 'random', 'time', 'turtle', 'sys'],
-    defaults: { int: '0', real: '0.0', bool: 'False', str: '""' },
+    defaults: { int: '0', long: '0', real: '0.0', double: '0.0', bool: 'False', str: '""', char: '""' },
     bool: function (v) { return v ? 'True' : 'False'; }, str: q,
     realStr: true,
-    toStr: function (e) { return e.t === 'bool' ? 'str(' + e.s + ').lower()' : e.t === 'real' ? "format(" + e.s + ", '.15g')" : 'str(' + e.s + ')'; },
+    toStr: function (e) { return e.t === 'bool' ? 'str(' + e.s + ').lower()' : (e.t === 'real' || e.t === 'double') ? "format(" + e.s + ", '.15g')" : 'str(' + e.s + ')'; },
     toInt: function (s) { return 'int(' + s + ')'; },
     pow: function (l, r, lw, rw) { return lw + ' ** ' + rw; }, powP: 9,
     decl: function (n, t, init, c) { return n + ' = ' + init + (c ? '  # constant' : ''); },
     declArr: function (n, t, size) { return [n + ' = [' + this.defaults[t] + '] * (' + size + ')']; },
     assign: function (l, r) { return l + ' = ' + r; },
-    input: function (t) { return { int: 'int(input())', real: 'float(input())', bool: 'input().strip().lower() == "true"', str: 'input()' }[t]; },
+    input: function (t) { return { int: 'int(input())', long: 'int(input())', real: 'float(input())', double: 'float(input())', bool: 'input().strip().lower() == "true"', str: 'input()', char: 'input()[0]' }[t]; },
     print: function (e, nl) { return 'print(' + (e.t === 'bool' ? 'str(' + e.s + ').lower()' : e.s) + (nl ? '' : ", end=''") + ')'; },
     ifHead: function (c, e) { return (e ? 'elif ' : 'if ') + c + ':'; }, elseHead: 'else:',
     whileHead: function (c) { return 'while ' + c + ':'; },
     doHead: 'while True:', doTailInside: true, doTail: function (c) { return 'if not (' + c + '): break'; },
     forHead: function (v, a, z, st, dec) {
-      if (a.t === 'real' || z.t === 'real' || st.t === 'real') return 'for ' + v + ' in (' + a.s + ' ' + (dec ? '-' : '+') + ' ' + st.s + ' * k for k in range(int(abs((' + z.s + ') - (' + a.s + ')) / (' + st.s + ')) + 1)):';
+      if (isFloat(a.t) || isFloat(z.t) || isFloat(st.t)) return 'for ' + v + ' in (' + a.s + ' ' + (dec ? '-' : '+') + ' ' + st.s + ' * k for k in range(int(abs((' + z.s + ') - (' + a.s + ')) / (' + st.s + ')) + 1)):';
       return 'for ' + v + ' in range(' + a.s + ', ' + z.s + (dec ? ' - 1' : ' + 1') + ', ' + (dec ? '-' : '') + st.s + '):';
     },
     tryHead: 'try:', catchHead: 'except Exception as _ex:', errAssign: function (v) { return v + ' = str(_ex)'; },
@@ -3642,16 +3759,16 @@ window.AP = window.AP || {};
 
   // ---------- JavaScript / TypeScript ----------
   function jsLike(ts) {
-    var T = { int: 'number', real: 'number', bool: 'boolean', str: 'string' };
+    var T = { int: 'number', long: 'number', real: 'number', double: 'number', bool: 'boolean', str: 'string', char: 'string' };
     return commonC({
       key: ts ? 'Typescript' : 'Javascript', name: ts ? 'TypeScript' : 'JavaScript', ext: ts ? 'ts' : 'js', funcBase: 0, mainBase: 0,
       kw: ['break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'export', 'extends', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'return', 'super', 'switch', 'this', 'throw', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield', 'let', 'static', 'enum', 'await', 'implements', 'package', 'protected', 'interface', 'private', 'public', 'null', 'true', 'false', 'undefined', 'Math', 'String', 'process', 'console', 'readLine'],
-      defaults: { int: '0', real: '0.0', bool: 'false', str: '""' },
+      defaults: { int: '0', long: '0', real: '0.0', double: '0.0', bool: 'false', str: '""', char: '""' },
       toStr: function (e) { return 'String(' + e.s + ')'; }, toInt: function (s) { return 'Math.trunc(' + s + ')'; },
       pow: function (l, r) { return 'Math.pow(' + l + ', ' + r + ')'; },
       decl: function (n, t, init, c) { return (c ? 'const ' : 'let ') + n + (ts ? ': ' + T[t] : '') + ' = ' + init + ';'; },
       declArr: function (n, t, size) { return ['let ' + n + (ts ? ': ' + T[t] + '[]' : '') + ' = new Array(' + size + ').fill(' + this.defaults[t] + ');']; },
-      input: function (t) { return { int: 'parseInt(readLine(), 10)', real: 'parseFloat(readLine())', bool: 'readLine().trim().toLowerCase() === "true"', str: 'readLine()' }[t]; },
+      input: function (t) { return { int: 'parseInt(readLine(), 10)', long: 'parseInt(readLine(), 10)', real: 'parseFloat(readLine())', double: 'parseFloat(readLine())', bool: 'readLine().trim().toLowerCase() === "true"', str: 'readLine()', char: 'readLine().charAt(0)' }[t]; },
       print: function (e, nl) { return nl ? 'console.log(' + e.s + ');' : 'process.stdout.write(String(' + e.s + '));'; },
       eq: '===', ne: '!==',
       catchHead: ts ? '} catch (_ex: any) {' : '} catch (_ex) {', errAssign: function (v) { return v + ' = String(_ex && _ex.message ? _ex.message : _ex);'; },
@@ -3690,19 +3807,21 @@ window.AP = window.AP || {};
   D.Typescript = jsLike(true);
 
   // ---------- Java ----------
-  var JT = { int: 'int', real: 'double', bool: 'boolean', str: 'String' };
+  var JT = { int: 'int', long: 'long', real: 'float', double: 'double', bool: 'boolean', str: 'String', char: 'char' };
   D.Java = commonC({
-    key: 'Java', name: 'Java', ext: 'java', funcBase: 1, mainBase: 2, castReal: '(double) ',
+    key: 'Java', name: 'Java', ext: 'java', funcBase: 1, mainBase: 2, castReal: '(double) ', hasChar: true, floatSuf: 'f', longSuf: 'L',
+    charLit: chrEsc, strToChar: function (s) { return s + '.charAt(0)'; }, toFloat: function (s) { return '(float) ' + s; },
+    fnCh: { tocode: ['(int) @1'], len: ['1'] },
     kw: ['abstract', 'assert', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class', 'const', 'continue', 'default', 'do', 'double', 'else', 'enum', 'extends', 'final', 'finally', 'float', 'for', 'goto', 'if', 'implements', 'import', 'instanceof', 'int', 'interface', 'long', 'native', 'new', 'package', 'private', 'protected', 'public', 'return', 'short', 'static', 'super', 'switch', 'synchronized', 'this', 'throw', 'throws', 'try', 'void', 'volatile', 'while', 'null', 'true', 'false', 'String', 'Math', 'System', 'Scanner', 'sc', 'rng', 'args', 'Main'],
-    defaults: { int: '0', real: '0.0', bool: 'false', str: '""' },
+    defaults: { int: '0', long: '0L', real: '0.0f', double: '0.0', bool: 'false', str: '""', char: "'\\0'" },
     realStr: true,
-    toStr: function (e) { return e.t === 'real' ? 'str(' + e.s + ')' : 'String.valueOf(' + e.s + ')'; }, toInt: function (s) { return '(int) ' + s; },
+    toStr: function (e) { return isFloat(e.t) ? 'str(' + e.s + ')' : 'String.valueOf(' + e.s + ')'; }, toInt: function (s, to) { return (to === 'long' ? '(long) ' : '(int) ') + s; },
     pow: function (l, r) { return 'Math.pow(' + l + ', ' + r + ')'; },
     strEq: function (l, r, neg) { return (neg ? '!' : '') + l.s + '.equals(' + r.s + ')'; },
     strCmp: function (l, r, op) { return l.s + '.compareTo(' + r.s + ') ' + op + ' 0'; },
     decl: function (n, t, init, c) { return (c ? 'final ' : '') + JT[t] + ' ' + n + ' = ' + init + ';'; },
     declArr: function (n, t, size) { var o = [JT[t] + '[] ' + n + ' = new ' + JT[t] + '[' + size + '];']; if (t === 'str') o.push('java.util.Arrays.fill(' + n + ', "");'); return o; },
-    input: function (t) { return { int: 'Integer.parseInt(sc.nextLine().trim())', real: 'Double.parseDouble(sc.nextLine().trim())', bool: 'sc.nextLine().trim().equalsIgnoreCase("true")', str: 'sc.nextLine()' }[t]; },
+    input: function (t) { return { int: 'Integer.parseInt(sc.nextLine().trim())', long: 'Long.parseLong(sc.nextLine().trim())', real: 'Float.parseFloat(sc.nextLine().trim())', double: 'Double.parseDouble(sc.nextLine().trim())', bool: 'sc.nextLine().trim().equalsIgnoreCase("true")', str: 'sc.nextLine()', char: 'sc.nextLine().charAt(0)' }[t]; },
     print: function (e, nl) { return 'System.out.' + (nl ? 'println' : 'print') + '(' + e.s + ');'; },
     catchHead: '} catch (Exception _ex) {', errAssign: function (v) { return v + ' = String.valueOf(_ex.getMessage());'; },
     exit: 'System.exit(0);', mainReturn: 'return;',
@@ -3712,7 +3831,7 @@ window.AP = window.AP || {};
     fn: {
       abs: ['Math.abs($1)'], sqrt: ['Math.sqrt($1)'], sin: ['Math.sin($1)'], cos: ['Math.cos($1)'], tan: ['Math.tan($1)'], arcsin: ['Math.asin($1)'], arccos: ['Math.acos($1)'], arctan: ['Math.atan($1)'],
       log: ['Math.log($1)'], log10: ['Math.log10($1)'], int: ['(int) ($1)'], sgn: ['(int) Math.signum($1)'], random: ['rng.nextInt($1)', 'random'], len: ['@1.length()'],
-      char: ['String.valueOf(@1.charAt($2))'], toreal: ['Double.parseDouble($1)'], tointeger: ['Integer.parseInt($1)'], tochar: ['String.valueOf((char) ($1))'], tocode: ['(int) @1.charAt(0)'],
+      char: ['@1.charAt($2)'], toreal: ['Double.parseDouble($1)'], tointeger: ['Integer.parseInt($1)'], tochar: ['((char) ($1))'], tocode: ['(int) @1.charAt(0)'],
       tofixed: ['String.format("%." + ($2) + "f", $1)'], size: ['@1.length'], pi: ['Math.PI'], time: ['System.currentTimeMillis() / 1000.0'], lf: ['"\\n"'], eof: ['false']
     },
     fnHead: function (n, ret, params) {
@@ -3736,19 +3855,21 @@ window.AP = window.AP || {};
   });
 
   // ---------- C# ----------
-  var CT = { int: 'int', real: 'double', bool: 'bool', str: 'string' };
+  var CT = { int: 'int', long: 'long', real: 'float', double: 'double', bool: 'bool', str: 'string', char: 'char' };
   D.CSharp = commonC({
-    key: 'CSharp', name: 'C#', ext: 'cs', funcBase: 1, mainBase: 2, castReal: '(double) ',
+    key: 'CSharp', name: 'C#', ext: 'cs', funcBase: 1, mainBase: 2, castReal: '(double) ', hasChar: true, floatSuf: 'f', longSuf: 'L',
+    charLit: chrEsc, strToChar: function (s) { return s + '[0]'; }, toFloat: function (s) { return '(float) ' + s; },
+    fnCh: { tocode: ['(int) @1'], len: ['1'] },
     kw: ['abstract', 'as', 'base', 'bool', 'break', 'byte', 'case', 'catch', 'char', 'checked', 'class', 'const', 'continue', 'decimal', 'default', 'delegate', 'do', 'double', 'else', 'enum', 'event', 'explicit', 'extern', 'false', 'finally', 'fixed', 'float', 'for', 'foreach', 'goto', 'if', 'implicit', 'in', 'int', 'interface', 'internal', 'is', 'lock', 'long', 'namespace', 'new', 'null', 'object', 'operator', 'out', 'override', 'params', 'private', 'protected', 'public', 'readonly', 'ref', 'return', 'sbyte', 'sealed', 'short', 'sizeof', 'static', 'string', 'struct', 'switch', 'this', 'throw', 'true', 'try', 'typeof', 'uint', 'ulong', 'unchecked', 'unsafe', 'ushort', 'using', 'virtual', 'void', 'volatile', 'while', 'Console', 'Math', 'rng', 'Program'],
-    defaults: { int: '0', real: '0.0', bool: 'false', str: '""' },
+    defaults: { int: '0', long: '0L', real: '0.0f', double: '0.0', bool: 'false', str: '""', char: "'\\0'" },
     realStr: true,
-    toStr: function (e) { var w = e.p < 100 ? '(' + e.s + ')' : e.s; return e.t === 'bool' ? w + '.ToString().ToLower()' : e.t === 'real' ? w + '.ToString(System.Globalization.CultureInfo.InvariantCulture)' : w + '.ToString()'; },
-    toInt: function (s) { return '(int) ' + s; },
+    toStr: function (e) { var w = e.p < 100 ? '(' + e.s + ')' : e.s; return e.t === 'bool' ? w + '.ToString().ToLower()' : isFloat(e.t) ? w + '.ToString(System.Globalization.CultureInfo.InvariantCulture)' : w + '.ToString()'; },
+    toInt: function (s, to) { return (to === 'long' ? '(long) ' : '(int) ') + s; },
     pow: function (l, r) { return 'Math.Pow(' + l + ', ' + r + ')'; },
     strCmp: function (l, r, op) { return 'string.CompareOrdinal(' + l.s + ', ' + r.s + ') ' + op + ' 0'; },
     decl: function (n, t, init, c) { return (c ? 'const ' : '') + CT[t] + ' ' + n + ' = ' + init + ';'; },
     declArr: function (n, t, size) { var o = [CT[t] + '[] ' + n + ' = new ' + CT[t] + '[' + size + '];']; if (t === 'str') o.push('Array.Fill(' + n + ', "");'); return o; },
-    input: function (t) { return { int: 'int.Parse(Console.ReadLine().Trim())', real: 'double.Parse(Console.ReadLine().Trim(), System.Globalization.CultureInfo.InvariantCulture)', bool: 'Console.ReadLine().Trim().ToLower() == "true"', str: 'Console.ReadLine()' }[t]; },
+    input: function (t) { return { int: 'int.Parse(Console.ReadLine().Trim())', long: 'long.Parse(Console.ReadLine().Trim())', real: 'float.Parse(Console.ReadLine().Trim(), System.Globalization.CultureInfo.InvariantCulture)', double: 'double.Parse(Console.ReadLine().Trim(), System.Globalization.CultureInfo.InvariantCulture)', char: 'Console.ReadLine()[0]', bool: 'Console.ReadLine().Trim().ToLower() == "true"', str: 'Console.ReadLine()' }[t]; },
     print: function (e, nl) { var s = e.t === 'bool' ? '(' + e.s + ').ToString().ToLower()' : e.s; return 'Console.' + (nl ? 'WriteLine' : 'Write') + '(' + s + ');'; },
     catchHead: '} catch (Exception _ex) {', errAssign: function (v) { return v + ' = _ex.Message;'; },
     exit: 'Environment.Exit(0);', mainReturn: 'return;',
@@ -3759,7 +3880,7 @@ window.AP = window.AP || {};
     fn: {
       abs: ['Math.Abs($1)'], sqrt: ['Math.Sqrt($1)'], sin: ['Math.Sin($1)'], cos: ['Math.Cos($1)'], tan: ['Math.Tan($1)'], arcsin: ['Math.Asin($1)'], arccos: ['Math.Acos($1)'], arctan: ['Math.Atan($1)'],
       log: ['Math.Log($1)'], log10: ['Math.Log10($1)'], int: ['(int) ($1)'], sgn: ['Math.Sign($1)'], random: ['rng.Next($1)', 'random'], len: ['@1.Length'],
-      char: ['@1[$2].ToString()'], toreal: ['double.Parse($1, System.Globalization.CultureInfo.InvariantCulture)'], tointeger: ['int.Parse($1)'], tochar: ['((char) ($1)).ToString()'], tocode: ['(int) @1[0]'],
+      char: ['@1[$2]'], toreal: ['double.Parse($1, System.Globalization.CultureInfo.InvariantCulture)'], tointeger: ['int.Parse($1)'], tochar: ['((char) ($1))'], tocode: ['(int) @1[0]'],
       tofixed: ['@1.ToString("F" + ($2), System.Globalization.CultureInfo.InvariantCulture)'], size: ['@1.Length'], pi: ['Math.PI'], time: ['DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0'], lf: ['"\\n"'], eof: ['false']
     },
     fnHead: function (n, ret, params) {
@@ -3778,20 +3899,22 @@ window.AP = window.AP || {};
   });
 
   // ---------- C++ ----------
-  var PT = { int: 'int', real: 'double', bool: 'bool', str: 'string' };
+  var PT = { int: 'int', long: 'long long', real: 'float', double: 'double', bool: 'bool', str: 'string', char: 'char' };
   D.CPP = commonC({
-    key: 'CPP', name: 'C++', ext: 'cpp', funcBase: 0, mainBase: 1, castReal: '(double) ',
+    key: 'CPP', name: 'C++', ext: 'cpp', funcBase: 0, mainBase: 1, castReal: '(double) ', hasChar: true, floatSuf: 'f', longSuf: 'LL',
+    charLit: chrEsc, strToChar: function (s) { return s + '[0]'; }, toFloat: function (s) { return '(float) ' + s; },
+    fnCh: { tocode: ['(int) @1'], len: ['1'] },
     kw: ['alignas', 'and', 'asm', 'auto', 'bool', 'break', 'case', 'catch', 'char', 'class', 'const', 'continue', 'default', 'delete', 'do', 'double', 'else', 'enum', 'explicit', 'export', 'extern', 'false', 'float', 'for', 'friend', 'goto', 'if', 'inline', 'int', 'long', 'namespace', 'new', 'not', 'operator', 'or', 'private', 'protected', 'public', 'register', 'return', 'short', 'signed', 'sizeof', 'static', 'struct', 'switch', 'template', 'this', 'throw', 'true', 'try', 'typedef', 'union', 'unsigned', 'using', 'virtual', 'void', 'volatile', 'while', 'string', 'vector', 'cout', 'cin', 'endl', 'main', 'pow', 'sqrt', 'abs', 'time', 'rand', 'exit', 'toStr', 'readLine', 'toFixed'],
-    defaults: { int: '0', real: '0.0', bool: 'false', str: 'string()' }, str: function (v) { return 'string(' + q(v) + ')'; },
+    defaults: { int: '0', long: '0LL', real: '0.0f', double: '0.0', bool: 'false', str: 'string()', char: "'\\0'" }, str: function (v) { return 'string(' + q(v) + ')'; },
     realStr: true,
-    toStr: function (e) { return e.t === 'int' ? 'to_string(' + e.s + ')' : e.t === 'bool' ? '(' + e.s + ' ? string("true") : string("false"))' : 'toStr(' + e.s + ')'; },
-    toInt: function (s) { return '(int) ' + s; },
+    toStr: function (e) { return isIntegral(e.t) ? 'to_string(' + e.s + ')' : e.t === 'char' ? 'string(1, ' + e.s + ')' : e.t === 'bool' ? '(' + e.s + ' ? string("true") : string("false"))' : 'toStr(' + e.s + ')'; },
+    toInt: function (s, to) { return (to === 'long' ? '(long long) ' : '(int) ') + s; },
     pow: function (l, r) { return 'pow(' + l + ', ' + r + ')'; },
     fmod: function (l, r) { return 'fmod(' + l + ', ' + r + ')'; },
     decl: function (n, t, init, c) { return (c ? 'const ' : '') + PT[t] + ' ' + n + ' = ' + init + ';'; },
     declArr: function (n, t, size) { return ['vector<' + PT[t] + '> ' + n + '(' + size + ', ' + this.defaults[t] + ');']; },
-    input: function (t) { return { int: 'stoi(readLine())', real: 'stod(readLine())', bool: '(readLine() == "true")', str: 'readLine()' }[t]; },
-    print: function (e, nl) { return 'cout << ' + e.s + (nl ? ' << endl;' : ';'); },
+    input: function (t) { return { int: 'stoi(readLine())', long: 'stoll(readLine())', real: 'stof(readLine())', double: 'stod(readLine())', bool: '(readLine() == "true")', str: 'readLine()', char: 'readLine()[0]' }[t]; },
+    print: function (e, nl) { return 'cout << ' + (e.p <= 5 ? '(' + e.s + ')' : e.s) + (nl ? ' << endl;' : ';'); },
     catchHead: '} catch (const exception& _ex) {', errAssign: function (v) { return v + ' = _ex.what();'; },
     exit: 'exit(0);', mainReturn: 'return 0;',
     throwErr: function (m) { return 'throw runtime_error(' + q(m) + ');'; },
@@ -3801,7 +3924,7 @@ window.AP = window.AP || {};
     fn: {
       abs: ['abs($1)'], sqrt: ['sqrt($1)'], sin: ['sin($1)'], cos: ['cos($1)'], tan: ['tan($1)'], arcsin: ['asin($1)'], arccos: ['acos($1)'], arctan: ['atan($1)'],
       log: ['log($1)'], log10: ['log10($1)'], int: ['(int) ($1)'], sgn: ['((($1) > 0) - (($1) < 0))'], random: ['(rand() % ($1))', 'random'], len: ['(int) @1.size()'],
-      char: ['string(1, @1[$2])'], toreal: ['stod($1)'], tointeger: ['stoi($1)'], tochar: ['string(1, (char) ($1))'], tocode: ['(int) @1[0]'],
+      char: ['@1[$2]'], toreal: ['stod($1)'], tointeger: ['stoi($1)'], tochar: ['((char) ($1))'], tocode: ['(int) @1[0]'],
       tofixed: ['toFixed($1, $2)', 'tofixed'], size: ['(int) @1.size()'], pi: ['3.14159265358979323846'], time: ['(double) time(nullptr)'], lf: ['string("\\n")'], eof: ['false']
     },
     fnHead: function (n, ret, params) {
@@ -4287,7 +4410,7 @@ window.AP = window.AP || {};
           text(tr('Variabile in cui salvare il valore', 'Variable to store the value in'), 'target', { kind: 'target', list: 'dl-vars', focus: true });
         },
         output: function () {
-          text(tr('Espressione da scrivere', 'Expression to print'), 'expr', { kind: 'expr', ph: '"Totale: " & totale', focus: true, hint: tr('Usa & per unire testo e valori, ad esempio  "Ciao " & nome', 'Use & to join text and values, e.g.  "Hello " & name') });
+          text(tr('Espressione da scrivere', 'Expression to print'), 'expr', { kind: 'expr', ph: '"Totale: " & totale', focus: true, hint: tr('Per unire testo e valori scrivili uno dopo l\'altro, ad esempio  "Ciao " nome "!"  (il simbolo & è facoltativo)', 'To join text and values just write them one after another, e.g.  "Hello " name "!"  (the & symbol is optional)') });
           check(tr('Vai a capo dopo il testo', 'New line after the text'), 'nl');
         },
         call: function () {
@@ -4779,10 +4902,10 @@ window.AP = window.AP || {};
       '<li>Premi <b>Esegui</b> (F5) per avviare, <b>Passo</b> (F10) per procedere un blocco alla volta. Con la rotellina + Ctrl ingrandisci.</li>',
       '<li>Il pannello a destra mostra console, variabili, grafica tartaruga e il <b>codice</b> equivalente in 6 linguaggi (Python, JavaScript, TypeScript, Java, C#, C++).</li></ul>',
       '<h4>Tipi e variabili</h4>',
-      '<p>Tipi: <code>Intero</code>, <code>Reale</code>, <code>Booleano</code>, <code>Stringa</code>, anche in forma di array. Le variabili vanno dichiarate con il blocco Dichiara; possono essere costanti. I nomi non distinguono maiuscole e minuscole.</p>',
+      '<p>Tipi: <code>Intero</code> (int, 32 bit), <code>Long</code> (64 bit), <code>Float</code> (decimale a 32 bit), <code>Double</code> (decimale a 64 bit), <code>Booleano</code>, <code>Stringa</code> e <code>Char</code> (un solo carattere, scritto tra apici: <code>&#39;a&#39;</code>), anche in forma di array. Le variabili vanno dichiarate con il blocco Dichiara; possono essere costanti. I nomi non distinguono maiuscole e minuscole.</p>',
       '<h4>Espressioni</h4>',
       '<table><tr><th>Operatori</th><th>Significato</th></tr>',
-      '<tr><td><code>+ - * / ^</code> <code>mod</code> o <code>%</code></td><td>aritmetica (<code>/</code> dà sempre un reale)</td></tr>',
+      '<tr><td><code>+ - * / ^</code> <code>mod</code> o <code>%</code></td><td>aritmetica (<code>/</code> dà sempre un decimale)</td></tr>',
       '<tr><td><code>&amp;</code></td><td>concatenazione di testo e valori</td></tr>',
       '<tr><td><code>= == != &lt;&gt; &lt; &gt; &lt;= &gt;=</code></td><td>confronti</td></tr>',
       '<tr><td><code>and or not</code> (anche <code>&amp;&amp; || !</code>)</td><td>logica booleana</td></tr></table>',
@@ -4804,10 +4927,10 @@ window.AP = window.AP || {};
       '<li>Press <b>Run</b> (F5) to start, <b>Step</b> (F10) to go one block at a time. Ctrl + wheel zooms.</li>',
       '<li>The right panel shows console, variables, turtle graphics and the equivalent <b>code</b> in 6 languages (Python, JavaScript, TypeScript, Java, C#, C++).</li></ul>',
       '<h4>Types and variables</h4>',
-      '<p>Types: <code>Integer</code>, <code>Real</code>, <code>Boolean</code>, <code>String</code>, also as arrays. Variables must be declared with the Declare block; they can be constants. Names are case-insensitive.</p>',
+      '<p>Types: <code>Integer</code> (int, 32-bit), <code>Long</code> (64-bit), <code>Float</code> (32-bit decimal), <code>Double</code> (64-bit decimal), <code>Boolean</code>, <code>String</code> and <code>Char</code> (a single character, written between single quotes: <code>&#39;a&#39;</code>), also as arrays. Variables must be declared with the Declare block; they can be constants. Names are case-insensitive.</p>',
       '<h4>Expressions</h4>',
       '<table><tr><th>Operators</th><th>Meaning</th></tr>',
-      '<tr><td><code>+ - * / ^</code> <code>mod</code> or <code>%</code></td><td>arithmetic (<code>/</code> always gives a real)</td></tr>',
+      '<tr><td><code>+ - * / ^</code> <code>mod</code> or <code>%</code></td><td>arithmetic (<code>/</code> always gives a decimal)</td></tr>',
       '<tr><td><code>&amp;</code></td><td>joins text and values</td></tr>',
       '<tr><td><code>= == != &lt;&gt; &lt; &gt; &lt;= &gt;=</code></td><td>comparisons</td></tr>',
       '<tr><td><code>and or not</code> (also <code>&amp;&amp; || !</code>)</td><td>Boolean logic</td></tr></table>',
